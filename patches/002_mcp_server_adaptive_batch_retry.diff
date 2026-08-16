@@ -1,0 +1,127 @@
+diff --git a/mcp_server_main.py b/mcp_server_main.py
+old mode 100644
+new mode 100755
+index 3e017e7..427fc70
+--- a/mcp_server_main.py
++++ b/mcp_server_main.py
+@@ -16,6 +16,7 @@ _McpJSONRPCMessage.model_rebuild(force=True)
+ import asyncio
+ import atexit
+ import logging
++import os
+ import httpx
+ import json
+ import time
+@@ -1376,43 +1377,82 @@ YANLIŞ KULLANIM:
+ 
+             documents_data = []
+             failed_fetches = 0
+-            decisions_to_process = all_decisions[:100]
++            # ADAPTIVE BATCH: 100 → 30 belge hedefle.
++            # Neden: Bedesten API 10 istek / 30s = 1/3s hızla sınırlar.
++            # 100 belge sıralı çekmek 6-7 dk sürer ve rate-limit'e takılır.
++            # 30 belge ~2 dk'da tamamlanır, semantik arama için yeterli.
++            # Override: BEDESTEN_SEMANTIC_BATCH_SIZE env var ile ayarlanabilir.
++            batch_size = int(os.getenv("BEDESTEN_SEMANTIC_BATCH_SIZE", "30"))
++            decisions_to_process = all_decisions[:batch_size]
++
++            # RETRY: BedestenRateLimited fırlatılırsa, kısa bekleme + retry yap.
++            # max_wait config'i ne olursa olsun, gerçek 429'lerde ekstra dayanıklılık sağlar.
++            max_retries = int(os.getenv("BEDESTEN_SEMANTIC_MAX_RETRIES", "3"))
+ 
+             for i, decision in enumerate(decisions_to_process):
+-                try:
+-                    doc = await bedesten_client_instance.get_document_as_markdown(decision.documentId)
+-
+-                    if doc.markdown_content:
+-                        metadata = {
+-                            "document_id": decision.documentId,
+-                            "birim_adi": decision.birimAdi,
+-                            "esas_no": decision.esasNo,
+-                            "karar_no": decision.kararNo,
+-                            "karar_tarihi": decision.kararTarihiStr,
+-                            "court_type": decision.itemType.name if decision.itemType else None
+-                        }
+-
+-                        chunks = processor.process_document(
+-                            document_id=decision.documentId,
+-                            text=doc.markdown_content,
+-                            metadata=metadata
+-                        )
++                success = False
++                last_err = None
++                for attempt in range(max_retries):
++                    try:
++                        doc = await bedesten_client_instance.get_document_as_markdown(decision.documentId)
++
++                        if doc.markdown_content:
++                            metadata = {
++                                "document_id": decision.documentId,
++                                "birim_adi": decision.birimAdi,
++                                "esas_no": decision.esasNo,
++                                "karar_no": decision.kararNo,
++                                "karar_tarihi": decision.kararTarihiStr,
++                                "court_type": decision.itemType.name if decision.itemType else None
++                            }
++
++                            chunks = processor.process_document(
++                                document_id=decision.documentId,
++                                text=doc.markdown_content,
++                                metadata=metadata
++                            )
+ 
+-                        if chunks:
+-                            full_text = " ".join([chunk.text for chunk in chunks])
+-                            documents_data.append({
+-                                "id": decision.documentId,
+-                                "text": full_text[:3000],
+-                                "metadata": metadata
+-                            })
++                            if chunks:
++                                full_text = " ".join([chunk.text for chunk in chunks])
++                                documents_data.append({
++                                    "id": decision.documentId,
++                                    "text": full_text[:3000],
++                                    "metadata": metadata
++                                })
++
++                        success = True
++                        break  # başarılı, retry döngüsünden çık
++
++                    except BedestenRateLimited as e:
++                        # Rate-limit: sunucu bizi 429'ladı veya local bucket dolmadı.
++                        # Kısa bekleme + retry yap. Cap 60s (uzun bekleme anlamsız).
++                        wait_s = min(float(e.retry_after) + 1.0, 60.0)
++                        last_err = e
++                        if attempt < max_retries - 1:
++                            logger.info(
++                                f"Doc {decision.documentId} rate-limited "
++                                f"(attempt {attempt+1}/{max_retries}), waiting {wait_s:.1f}s..."
++                            )
++                            await asyncio.sleep(wait_s)
++                        else:
++                            logger.warning(
++                                f"Doc {decision.documentId} rate-limited, "
++                                f"all {max_retries} retries exhausted, skipping"
++                            )
+ 
+-                    if (i + 1) % 10 == 0:
+-                        logger.info(f"Processed {i + 1}/{len(decisions_to_process)} documents")
++                    except Exception as e:
++                        # Diğer hatalar (404, network, parse) retry yapma — atla.
++                        last_err = e
++                        logger.warning(f"Failed to fetch document {decision.documentId}: {e}")
++                        break
+ 
+-                except Exception as e:
+-                    logger.warning(f"Failed to fetch document {decision.documentId}: {e}")
++                if not success:
+                     failed_fetches += 1
+ 
++                if (i + 1) % 10 == 0:
++                    logger.info(f"Processed {i + 1}/{len(decisions_to_process)} documents "
++                                f"({len(documents_data)} success, {failed_fetches} failed)")
++
+             if not documents_data:
+                 logger.warning("No documents could be processed")
+                 return {

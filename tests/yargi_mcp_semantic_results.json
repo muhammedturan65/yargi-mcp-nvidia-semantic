@@ -1,0 +1,95 @@
+{
+  "status": "success",
+  "query": "Mirasçının muvazaalı satış işlemine karşı tapu iptali ve tescil davası açması",
+  "initial_keyword": "muvazaa tapu iptal",
+  "total_documents_processed": 18,
+  "embedding_model": "nvidia/nv-embed-v1",
+  "embedding_dimension": 4096,
+  "results": [
+    {
+      "document_id": "1221186600",
+      "title": "7. Hukuk Dairesi - Esas: 2025/4588 - Karar: 2026/3422 - Tarih: 23.06.2026",
+      "similarity_score": 0.5346828699111938,
+      "preview": "Hukuk Dairesi 2025 4588 E , 2026 3422 K \"İçtihat Metni\" MAHKEMESİ : Antalya Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2023 2399 E , 2025 1607 K İLK DERECE MAHKEMESİ : Antalya 4 Asliye Hukuk Mahkemesi SAYISI : 2021 398 E , 2023 299 K Bölge Adliye Mahkemesi kararı taraf vekilleri tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçelerinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan ra...",
+      "metadata": {
+        "document_id": "1221186600",
+        "birim_adi": "7. Hukuk Dairesi",
+        "esas_no": "2025/4588",
+        "karar_no": "2026/3422",
+        "karar_tarihi": "23.06.2026",
+        "court_type": "YARGITAYKARARI",
+        "chamber": "7. Hukuk Dairesi"
+      },
+      "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221186600"
+    },
+    {
+      "document_id": "1221108700",
+      "title": "7. Hukuk Dairesi - Esas: 2026/2403 - Karar: 2026/3418 - Tarih: 2002-03-14",
+      "similarity_score": 0.5015990734100342,
+      "preview": "Hukuk Dairesi 2026 2403 E , 2026 3418 K \"İçtihat Metni\" MAHKEMESİ : Adana Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2024 2152 E , 2026 135 K İLK DERECE MAHKEMESİ : Erdemli 3 Asliye Hukuk Mahkemesi SAYISI : 2014 55 E , 2021 216 K Bölge Adliye Mahkemesi kararı davalılardan vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapo...",
+      "metadata": {
+        "document_id": "1221108700",
+        "birim_adi": "7. Hukuk Dairesi",
+        "esas_no": "2026/2403",
+        "karar_no": "2026/3418",
+        "karar_tarihi": "2002-03-14",
+        "court_type": "YARGITAYKARARI",
+        "chamber": "7. Hukuk Dairesi"
+      },
+      "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221108700"
+    },
+    {
+      "document_id": "1221227100",
+      "title": "7. Hukuk Dairesi - Esas: 2025/4950 - Karar: 2026/3424 - Tarih: 23.06.2026",
+      "similarity_score": 0.4742284119129181,
+      "preview": "Hukuk Dairesi 2025 4950 E , 2026 3424 K \"İçtihat Metni\" MAHKEMESİ : Gaziantep Bölge Adliye Mahkemesi 16 Hukuk Dairesi SAYISI : 2022 509 E , 2025 924 K İLK DERECE MAHKEMESİ : Kahramanmaraş 3 Asliye Hukuk Mahkemesi SAYISI : 2021 38 E , 2021 737 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan ...",
+      "metadata": {
+        "document_id": "1221227100",
+        "birim_adi": "7. Hukuk Dairesi",
+        "esas_no": "2025/4950",
+        "karar_no": "2026/3424",
+        "karar_tarihi": "23.06.2026",
+        "court_type": "YARGITAYKARARI",
+        "chamber": "7. Hukuk Dairesi"
+      },
+      "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221227100"
+    },
+    {
+      "document_id": "1221217100",
+      "title": "7. Hukuk Dairesi - Esas: 2026/3025 - Karar: 2026/3499 - Tarih: 2019-10-17",
+      "similarity_score": 0.4653199017047882,
+      "preview": "Hukuk Dairesi 2026 3025 E , 2026 3499 K \"İçtihat Metni\" MAHKEMESİ : Ankara Bölge Adliye Mahkemesi 37 Hukuk Dairesi SAYISI : 2024 3437 E , 2026 577 K İLK DERECE MAHKEMESİ : Ankara Batı 5 Asliye Hukuk Mahkemesi SAYISI : 2021 398 E , 2022 276 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rap...",
+      "metadata": {
+        "document_id": "1221217100",
+        "birim_adi": "7. Hukuk Dairesi",
+        "esas_no": "2026/3025",
+        "karar_no": "2026/3499",
+        "karar_tarihi": "2019-10-17",
+        "court_type": "YARGITAYKARARI",
+        "chamber": "7. Hukuk Dairesi"
+      },
+      "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221217100"
+    },
+    {
+      "document_id": "1221120300",
+      "title": "7. Hukuk Dairesi - Esas: 2026/4216 - Karar: 2026/3514 - Tarih: 29.06.2026",
+      "similarity_score": 0.4587422013282776,
+      "preview": "Hukuk Dairesi 2026 4216 E , 2026 3514 K \"İçtihat Metni\" MAHKEMESİ : Erzurum Bölge Adliye Mahkemesi 2 Hukuk Dairesi SAYISI : 2025 903 E , 2025 1315 K İLK DERECE MAHKEMESİ : Arpaçay Asliye Hukuk Mahkemesi SAYISI : 2024 298 E , 2025 111 K Bölge Adliye Mahkemesi kararı davacı tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapor dinlendikt...",
+      "metadata": {
+        "document_id": "1221120300",
+        "birim_adi": "7. Hukuk Dairesi",
+        "esas_no": "2026/4216",
+        "karar_no": "2026/3514",
+        "karar_tarihi": "29.06.2026",
+        "court_type": "YARGITAYKARARI",
+        "chamber": "7. Hukuk Dairesi"
+      },
+      "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221120300"
+    }
+  ],
+  "stats": {
+    "documents_in_store": 18,
+    "memory_usage_mb": 0.34,
+    "failed_fetches": 2
+  }
+}
