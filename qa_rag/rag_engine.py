@@ -1,9 +1,20 @@
 """
-RAG engine — yargi-mcp semantik arama + NVIDIA LLM entegrasyonu.
+RAG engine — yargi-mcp semantik arama + multi-provider LLM + answer cache.
 
 Kullanıcı sorusu → embedding → vector store'da top-K arama →
-context construction → NVIDIA LLM ile cevap üretimi →
+context construction → LLM ile cevap üretimi →
 atıflı yanıt.
+
+v1.3.0:
+    - Multi-provider LLM (LLM_PROVIDER=nvidia|groq|openai|ollama)
+    - Semantik answer cache (RAG_ANSWER_CACHE=true, default)
+      Aynı/benzer soru tekrar sorulduğunda LLM çağrısı yapılmaz.
+    - LLMResponse.from_cache alanı cache hit olduğunu belirtir.
+
+v1.2.0:
+    - ChromaDB kalıcı vector store (restart'ta kayıp yok)
+    - Token-aware chunking (512 token, 80 overlap)
+    - Bedesten tam metin çekme (preview yerine)
 
 İki backend modu var:
     - "chroma" (default): ChromaDB kalıcı vector store. İlk çağrıda Bedesten
@@ -18,8 +29,14 @@ Kullanım:
     await rag.load_corpora()                 # ilk seferlikte ~5-10 dk
     response = await rag.ask("Mirasçı hangi davayı açar?")  # sub-second retrieval
 
-    # Legacy in-memory modu:
-    rag = LegalQARAG(backend="memory")
+    # Hızlı LLM (önerilen):
+    os.environ["LLM_PROVIDER"] = "groq"
+    os.environ["GROQ_API_KEY"] = "gq_..."
+    rag = LegalQARAG()
+    response = await rag.ask("...")  # ~3s yerine ~60s
+
+    # Cache kapatma:
+    os.environ["RAG_ANSWER_CACHE"] = "false"
 """
 
 from __future__ import annotations
@@ -49,6 +66,7 @@ class RAGContext:
     decisions: List[Dict] = field(default_factory=list)  # formatted_results formatı
     total_found: int = 0
     search_time_ms: float = 0.0
+    query_embedding: Optional[object] = None  # v1.3.0+: reuse for cache lookup
 
 
 @dataclass
@@ -64,6 +82,10 @@ class RAGResponse:
     total_time_ms: float
     retrieval_time_ms: float
     generation_time_ms: float
+    # v1.3.0+ — cache metadata
+    from_cache: bool = False
+    cache_score: float = 0.0       # cache hit ise cosine score
+    llm_provider: str = ""
 
 
 class LegalQARAG:
@@ -77,11 +99,19 @@ class LegalQARAG:
         llm_temperature: Hukuki: düşük yaratıcılık (0.2)
         llm_max_tokens: Maksimum cevap token sayısı
         chroma_collection: ChromaDB collection adı (chroma backend için)
+        llm_provider: v1.3.0+ — "nvidia"|"groq"|"openai"|"ollama" (default: env LLM_PROVIDER)
+        enable_answer_cache: v1.3.0+ — semantik answer cache (default: env RAG_ANSWER_CACHE)
 
     Usage:
         rag = LegalQARAG()                       # chroma backend (default)
         await rag.load_corpora()                 # ilk seferlikte index
         response = await rag.ask("Mirasçı hangi davayı açar?")
+
+        # Hızlı LLM (önerilen v1.3.0+):
+        os.environ["LLM_PROVIDER"] = "groq"
+        os.environ["GROQ_API_KEY"] = "gq_..."
+        rag = LegalQARAG()
+        response = await rag.ask("...")  # ~3s yerine ~60s
     """
 
     def __init__(
@@ -92,6 +122,8 @@ class LegalQARAG:
         llm_temperature: float = 0.2,
         llm_max_tokens: int = 1500,
         chroma_collection: Optional[str] = None,
+        llm_provider: Optional[str] = None,
+        enable_answer_cache: Optional[bool] = None,
     ):
         if backend not in ("chroma", "memory"):
             raise ValueError(f"backend 'chroma' veya 'memory' olmalı, got: {backend}")
@@ -103,6 +135,12 @@ class LegalQARAG:
         self.chroma_collection = chroma_collection or os.getenv(
             "CHROMA_COLLECTION", "yargi_decisions"
         )
+        self.llm_provider = llm_provider  # None → LLMClient env'den çözer
+
+        # v1.3.0+ — Answer cache (ChromaDB'de ayrı collection)
+        if enable_answer_cache is not None:
+            os.environ["RAG_ANSWER_CACHE"] = "true" if enable_answer_cache else "false"
+        self._answer_cache = None  # lazy init
 
         # Lazy-loaded components
         self._embedder = None
@@ -141,14 +179,29 @@ class LegalQARAG:
         return self._vector_store
 
     def _get_llm_client(self):
+        """v1.3.0+: Multi-provider LLM client. Default NVIDIA (backward compat)."""
         if self._llm_client is None:
-            from .llm_client import NvidiaLLMClient
-            self._llm_client = NvidiaLLMClient(
-                temperature=self.llm_temperature,
-                max_tokens=self.llm_max_tokens,
+            from .llm_client import LLMClient
+            kwargs = {
+                "temperature": self.llm_temperature,
+                "max_tokens": self.llm_max_tokens,
+            }
+            if self.llm_provider:
+                kwargs["provider"] = self.llm_provider
+            self._llm_client = LLMClient(**kwargs)
+            logger.info(
+                f"LLM client yüklendi: provider={self._llm_client.provider}, "
+                f"model={self._llm_client.model}"
             )
-            logger.info(f"LLM client yüklendi: {self._llm_client.model}")
         return self._llm_client
+
+    def _get_answer_cache(self):
+        """v1.3.0+: Lazy-init answer cache (ChromaDB'de ayrı collection)."""
+        if self._answer_cache is None:
+            from .answer_cache import AnswerCache
+            embedder = self._get_embedder()
+            self._answer_cache = AnswerCache(dimension=embedder.dimension)
+        return self._answer_cache
 
     def _get_mcp_module(self):
         """mcp_server_main modülünü lazy yükle (search_bedesten_semantic için)."""
@@ -419,17 +472,25 @@ class LegalQARAG:
             decisions=decisions,
             total_found=len(decisions),
             search_time_ms=elapsed_ms,
+            query_embedding=query_emb,  # v1.3.0+: ask() cache lookup için tekrar kullanır
         )
 
     async def ask(self, question: str, top_k: Optional[int] = None) -> RAGResponse:
         """
-        Tam RAG pipeline — retrieve + generate.
+        Tam RAG pipeline — retrieve + (cache lookup) + generate.
+
+        v1.3.0+ flow:
+            1. Retrieve top-K karar (NVIDIA query embed + ChromaDB search)
+            2. Answer cache lookup (aynı query_emb ile ChromaDB qa_cache search)
+               - Hit  → cache'den cevap döner, LLM çağrısı YAPILMAZ
+               - Miss → LLM çağrısı yap, Q+A+citations cache'e yaz
+            3. (Cache miss ise) LLM call
+            4. Build RAGResponse (from_cache flag ile)
 
         Returns:
-            RAGResponse — answer + citations + metadata
+            RAGResponse — answer + citations + metadata (from_cache dahil)
         """
         from .prompts import SYSTEM_PROMPT_LEGAL, build_user_prompt, build_context_from_decisions
-        from .citations import build_citations_from_decisions
 
         t_total_start = time.time()
 
@@ -453,18 +514,53 @@ class LegalQARAG:
                 generation_time_ms=0,
             )
 
-        # 2) Build context
+        # 2) v1.3.0+ — Answer cache lookup (query_emb'i reuse et)
+        cache = self._get_answer_cache()
+        if cache.enabled and ctx.query_embedding is not None:
+            t_cache_start = time.time()
+            hit = cache.lookup(ctx.query_embedding)
+            cache_ms = (time.time() - t_cache_start) * 1000
+            if hit is not None:
+                logger.info(
+                    f"Cache HIT — LLM çağrısı atlandı, cache lookup {cache_ms:.0f}ms"
+                )
+                response = RAGResponse(
+                    question=question,
+                    answer=hit.answer,
+                    citations=hit.citations,
+                    context_decision_count=len(hit.citations),
+                    embedding_model=self._get_embedder().model,
+                    llm_model=hit.llm_model,
+                    llm_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                    total_time_ms=(time.time() - t_total_start) * 1000,
+                    retrieval_time_ms=ctx.search_time_ms,
+                    generation_time_ms=cache_ms,
+                    from_cache=True,
+                    cache_score=hit.score,
+                    llm_provider=hit.llm_provider,
+                )
+                logger.info(
+                    f"RAG tamam (CACHE) — toplam {response.total_time_ms:.0f}ms "
+                    f"(retrieval {ctx.search_time_ms:.0f}ms + cache {cache_ms:.0f}ms, "
+                    f"score={hit.score:.4f})"
+                )
+                return response
+
+        # 3) Build context
         context_text = build_context_from_decisions(ctx.decisions)
         user_prompt = build_user_prompt(question, context_text)
 
-        # 3) LLM call
+        # 4) LLM call (cache miss)
         llm = self._get_llm_client()
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT_LEGAL},
             {"role": "user", "content": user_prompt},
         ]
 
-        logger.info(f"LLM çağrılıyor: {llm.model}, prompt={len(user_prompt)} chars")
+        logger.info(
+            f"LLM çağrılıyor: provider={llm.provider}, model={llm.model}, "
+            f"prompt={len(user_prompt)} chars"
+        )
         t_llm_start = time.time()
         llm_resp = await llm.chat_async(
             messages=messages,
@@ -473,7 +569,21 @@ class LegalQARAG:
         )
         gen_ms = (time.time() - t_llm_start) * 1000
 
-        # 4) Build response
+        # 5) v1.3.0+ — Cache'e yaz (cache enabled ise)
+        if cache.enabled and ctx.query_embedding is not None:
+            cache.store(
+                question=question,
+                question_embedding=ctx.query_embedding,
+                answer=llm_resp.text,
+                citations=ctx.decisions,
+                metadata={
+                    "llm_model": llm.model,
+                    "llm_provider": llm.provider,
+                    "embedding_model": self._get_embedder().model,
+                },
+            )
+
+        # 6) Build response
         response = RAGResponse(
             question=question,
             answer=llm_resp.text,
@@ -485,11 +595,13 @@ class LegalQARAG:
             total_time_ms=(time.time() - t_total_start) * 1000,
             retrieval_time_ms=ctx.search_time_ms,
             generation_time_ms=gen_ms,
+            from_cache=False,
+            llm_provider=llm.provider,
         )
         logger.info(
             f"RAG tamam — toplam {response.total_time_ms:.0f}ms "
             f"(retrieval {ctx.search_time_ms:.0f}ms + gen {gen_ms:.0f}ms, "
-            f"tokens: {llm_resp.usage.get('total_tokens', 0)})"
+            f"provider={llm.provider}, tokens: {llm_resp.usage.get('total_tokens', 0)})"
         )
         return response
 

@@ -14,6 +14,121 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) standardına uya
 - Query embedding cache (sorgu→embedding lookup, NVIDIA API çağrısını azaltır)
 - Hukuki stop-word filtering + section-aware retrieval (GEREKÇE section'ına ağırlık)
 
+## [1.3.0] — 2026-08-17
+
+### Eklendi
+
+#### Multi-Provider LLM Backend + Semantik Answer Cache
+
+v1.3.0, v1.2.0'daki en büyük kullanıcı acısını çözer: **NVIDIA LLM 60-240 saniye latency**.
+İki katmanlı çözüm uygulanmıştır:
+
+1. **Multi-provider LLM client** — NVIDIA/Groq/OpenAI/Ollama destekli
+2. **Semantik answer cache** — ChromaDB'de Q→A çiftleri, tekrarlayan/benzer sorular anında döner
+
+##### 1. Multi-Provider LLM (`qa_rag/llm_client.py`)
+
+- **Yeni:** `LLMClient` sınıfı — tüm provider'lar OpenAI-compatible API sunduğu için tek SDK
+  - 4 provider desteği: `nvidia` (default) / `groq` (önerilen — ~500 tok/s) / `openai` / `ollama`
+  - Provider seçimi: `LLM_PROVIDER` env var veya constructor parametresi
+  - Provider-specific config: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_TIMEOUT`
+  - Backward compat: `NvidiaLLMClient` alias korundu (v1.1.0/v1.2.0 kodu çalışır)
+- **Yeni:** `get_llm_client()` factory fonksiyonu
+- **Yeni:** `PROVIDER_DEFAULTS` dict — her provider için default base_url/model/timeout
+- **Yeni:** `LLMResponse.provider` alanı — hangi provider'ın ürettiğini belirtir
+- **Yeni:** `LLMResponse.from_cache` alanı — cache hit mi LLM call mı
+
+Provider default'ları:
+| Provider | Base URL | Default Model | Timeout | Notes |
+|---|---|---|---|---|
+| nvidia | integrate.api.nvidia.com/v1 | meta/llama-3.1-70b-instruct | 90s | Kaliteli, yavaş |
+| groq | api.groq.com/openai/v1 | llama-3.3-70b-versatile | 30s | **HIZLI (~500 tok/s)** |
+| openai | api.openai.com/v1 | gpt-4o-mini | 30s | Ucuz, hızlı |
+| ollama | localhost:11434/v1 | llama3.1:8b | 60s | Local, API key yok |
+
+Eski env var'lar (`NVIDIA_API_KEY`, `NVIDIA_LLM_MODEL`, vb.) hâlâ destekleniyor — mevcut
+kurulumlar kırılmadan çalışmaya devam eder.
+
+##### 2. Semantik Answer Cache (`qa_rag/answer_cache.py`)
+
+- **Yeni:** `AnswerCache` sınıfı — ChromaDB'de ayrı `qa_cache` collection'ı
+  - `lookup(question_embedding, threshold)` — cosine search, top-1, threshold kontrolü
+  - `store(question, embedding, answer, citations, metadata)` — yeni Q→A çifti yaz
+  - `clear()` — tüm cache'i temizle
+  - `size()`, `get_stats()` — cache durumu
+- **Yeni:** `CacheHit` dataclass — cache hit sonucu (answer, citations, score, metadata)
+- **ChromaVectorStore ile aynı persistent client'ı paylaşır** — ayrı process/DB gerekmez
+
+Çalışma prensibi:
+```
+ask(question)
+  ├─ retrieve(question)          # NVIDIA embed (~1s) + ChromaDB search (~50ms)
+  ├─ cache.lookup(query_emb)     # ChromaDB cosine search (~4ms)
+  │   ├─ HIT (score >= 0.92)    # → cached answer + citations döner, LLM atlanır
+  │   └─ MISS                   # → LLM çağrısı yapılır
+  ├─ llm.chat_async(messages)    # NVIDIA: ~50-240s / Groq: ~2-5s
+  └─ cache.store(Q, emb, A, cit) # Sonraki sorgu için cache'e yaz
+```
+
+Env var'lar:
+- `RAG_ANSWER_CACHE` — `"true"` (default) / `"false"` (kapat)
+- `RAG_CACHE_THRESHOLD` — `0.92` (default, cosine threshold)
+- `RAG_CACHE_COLLECTION` — `"qa_cache"` (default, ChromaDB collection adı)
+
+##### 3. RAG Engine Entegrasyonu (`qa_rag/rag_engine.py`)
+
+- `LegalQARAG.__init__()` — yeni parametreler: `llm_provider`, `enable_answer_cache`
+- `_get_llm_client()` — `NvidiaLLMClient` yerine `LLMClient` factory kullanır
+- `_get_answer_cache()` — lazy-init answer cache
+- `retrieve()` — `RAGContext.query_embedding` alanı eklendi (cache lookup için reuse)
+- `ask()` — cache lookup + cache store entegrasyonu
+- `RAGResponse` — yeni alanlar: `from_cache`, `cache_score`, `llm_provider`
+- Cache HIT durumunda LLM çağrısı tamamen atlanır, `generation_time_ms` ~4ms
+
+### Değişti
+
+- `qa_rag/__init__.py` — `LLMClient`, `get_llm_client`, `AnswerCache`, `CacheHit`, `LLMResponse` export edildi
+- `__version__` — `1.2.0` → `1.3.0`
+- `pyproject.toml` — version + description + keywords güncellendi
+
+### Performans Karşılaştırması
+
+Benchmark: "Muvazaalı tapu satışında mirasçı hangi davayı açar?" sorusu, NVIDIA LLM
+(meta/llama-3.1-70b-instruct), ChromaDB 70 chunk (17 belge) corpus.
+
+| Senaryo | v1.2.0 | v1.3.0 (cache miss) | v1.3.0 (cache hit) |
+|---|---|---|---|
+| Retrieval | 1.5s | 5.8s (NVIDIA query embed) | 1.85s |
+| LLM call | 46-240s | 46.6s (3808 tokens) | **0s (atlandı)** |
+| Cache lookup | — | 0s (cache boş) | 4ms |
+| **Toplam** | **60-240s** | **52.5s** | **1.86s** |
+| Hızlanma | — | — | **28.3x** |
+
+Not: Cache HIT durumunda hâlâ ~1.8s var çünkü NVIDIA query embedding hâlâ yapılıyor.
+v1.4.0'da query embedding cache eklenecek (NVIDIA API çağrısı tamamen önlenebilir).
+
+### Gerçek Kullanım Senaryoları
+
+1. **Demo / sohbet**: Aynı soru 2-3 kere sorulduğunda, ilk seferden sonra anında cevap
+2. **Toplu soru-cevap**: 100 belge üzerinde 20 farklı soru → ilk tur 17 dk, ikinci tur 36s
+3. **Production**: Sık sorulan sorular (FAQ) için cache hit ratio %80+ ulaşabilir
+
+### Test Sonuçları
+
+- **5/5 smoke test** geçti: import, factory, cache init, store+lookup, RAG init
+- **Cache HIT benchmark**: 28.3x speedup (52.5s → 1.86s, score=1.0000)
+- Test dosyaları:
+  - `/home/z/my-project/scripts/test_v13_smoke.py`
+  - `/home/z/my-project/scripts/test_v13_cache_check.py`
+  - `tests/v13_rag_cache_results.json` — benchmark sonuçları
+
+### Bilinen Sınırlar
+
+- NVIDIA query embedding hâlâ her sorguda yapılır (~1s) — v1.4.0'da cache eklenecek
+- Cache TTL yok — hukuki soruların cevabı değişmez, karar metinleri sabit olduğu için sorun değil
+- Cache invalidation: corpus güncellendiğinde manuel `cache.clear()` gerekir
+- Groq free tier 30 req/dk limiti var (production için paid plan önerilir)
+
 ## [1.2.0] — 2026-08-17
 
 ### Eklendi

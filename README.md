@@ -196,6 +196,148 @@ Orijinal yargi-mcp projesi MIT lisansı altında dağıtılmaktadır. Bu fork da
 
 ---
 
+## Hukuki QA Chatbot (RAG) — v1.3.0 (Multi-Provider LLM + Answer Cache)
+
+v1.3.0, v1.2.0'daki en büyük acı noktasını çözer: **NVIDIA LLM 60-240 saniye latency**.
+İki katmanlı çözüm ile tekrarlayan/benzer sorular artık ~2 saniyede döner.
+
+### Yenilikler
+
+#### 1. Multi-Provider LLM Backend
+
+Artık NVIDIA'ya bağlı kalmak zorunda değilsiniz. **Groq** ile ~500 tok/s, **OpenAI** ile
+ucuz/hızlı GPT-4o-mini, **Ollama** ile tamamen local LLM kullanabilirsiniz.
+
+```bash
+# Hızlı LLM için (önerilen):
+export LLM_PROVIDER=groq
+export GROQ_API_KEY=gq_...
+
+# Veya OpenAI:
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-...
+
+# Veya tamamen local:
+export LLM_PROVIDER=ollama
+ollama pull llama3.1:8b
+```
+
+| Provider | Default Model | Hız | Maliyet | Türkçe Kalite |
+|---|---|---|---|---|
+| nvidia | meta/llama-3.1-70b-instruct | Yavaş (~5 tok/s) | Ücretsiz | İyi |
+| **groq** | llama-3.3-70b-versatile | **Hızlı (~500 tok/s)** | Ücretsiz tier | İyi |
+| openai | gpt-4o-mini | Orta (~50 tok/s) | Ucuz | Çok iyi |
+| ollama | llama3.1:8b | Local hız | Ücretsiz | Orta |
+
+#### 2. Semantik Answer Cache
+
+Aynı veya benzer (cosine ≥ 0.92) soru tekrar sorulduğunda, LLM çağrısı yapılmadan
+cache'den yanıt döner. ChromaDB'de ayrı `qa_cache` collection'da saklanır.
+
+```python
+from qa_rag import LegalQARAG
+
+rag = LegalQARAG()
+await rag.load_corpora()
+
+# İlk sorgu — LLM çağrılır (~60s NVIDIA, ~3s Groq)
+r1 = await rag.ask("Mirasçı hangi davayı açar?")
+print(f"Süre: {r1.total_time_ms/1000:.1f}s, from_cache: {r1.from_cache}")
+# → Süre: 52.5s, from_cache: False
+
+# Aynı soru tekrar — cache HIT, LLM atlanır
+r2 = await rag.ask("Mirasçı hangi davayı açar?")
+print(f"Süre: {r2.total_time_ms/1000:.1f}s, from_cache: {r2.from_cache}, score: {r2.cache_score:.4f}")
+# → Süre: 1.9s, from_cache: True, score: 1.0000
+```
+
+Cache kontrolü:
+```bash
+export RAG_ANSWER_CACHE=true             # default — açık
+export RAG_CACHE_THRESHOLD=0.92          # cosine threshold (yüksek = daha sıkı eşleşme)
+export RAG_CACHE_COLLECTION=qa_cache     # ChromaDB collection adı
+```
+
+### v1.2.0 → v1.3.0 Performans Karşılaştırması
+
+| Senaryo | v1.2.0 | v1.3.0 cache MISS | v1.3.0 cache HIT |
+|---|---|---|---|
+| İlk sorgu | 60-240s | 52.5s | — |
+| Tekrar sorgu | 60-240s (LLM yine çağrılır) | — | **1.86s** |
+| LLM tokens | ~3800 | ~3800 | 0 (atlandı) |
+| **Hızlanma** | — | — | **28.3x** |
+
+### Mimari (v1.3.0)
+
+```
+                     ┌─────────────────────────────────────┐
+                     │  BedestenIndexer (tek seferlik)     │
+                     │  v1.2.0 — ChromaDB kalıcı store    │
+                     └─────────────────┬───────────────────┘
+                                       │ (disk - kalıcı)
+                                       ▼
+                     ┌─────────────────────────────────────┐
+Kullanıcı sorusu ──► │  LegalQARAG.ask()                   │
+                     │   1. NVIDIA nv-embed-v1 (query)     │ ~1s
+                     │   2. ChromaDB.search_with_dedup()   │ ~50ms
+                     │   3. AnswerCache.lookup() [v1.3.0]  │ ~4ms
+                     │      ├─ HIT → cache'den cevap       │ → RETURN
+                     │      └─ MISS → devam                │
+                     │   4. LLMClient.chat_async() [v1.3.0]│ ~3-240s
+                     │      └─ NVIDIA / Groq / OpenAI /    │
+                     │         Ollama (env'den seçim)      │
+                     │   5. AnswerCache.store() [v1.3.0]   │ ~50ms
+                     └─────────────────────────────────────┘
+```
+
+### Backward Compatibility
+
+v1.3.0, v1.2.0 ve v1.1.0 kodu ile **tam uyumlu**:
+- `NvidiaLLMClient` alias korundu (v1.1.0/v1.2.0 import'ları çalışır)
+- Tüm eski env var'lar destekleniyor: `NVIDIA_API_KEY`, `NVIDIA_LLM_MODEL`, vb.
+- `LegalQARAG()` default hâlâ NVIDIA + cache enabled
+- v1.2.0 ChromaDB collection'ları (yargi_decisions, yargi_v12_medium) çalışır
+
+### Hızlı Başlangıç (v1.3.0 — Groq ile)
+
+```bash
+# 1. Groq API key al: https://console.groq.com/keys (ücretsiz)
+export GROQ_API_KEY=gq_...
+
+# 2. NVIDIA embedding (hâlâ NVIDIA nv-embed-v1 kullanıyoruz — en iyi Türkçe embedding)
+export LOCAL_EMBEDDING_API_KEY=nvapi-...
+export EMBEDDING_PROVIDER=local
+export LOCAL_EMBEDDING_BASE_URL=https://integrate.api.nvidia.com/v1
+export LOCAL_EMBEDDING_MODEL=nvidia/nv-embed-v1
+export LOCAL_EMBEDDING_DIMENSION=4096
+export LOCAL_EMBEDDING_INPUT_TYPE=auto
+export EMBEDDING_PROMPT_STYLE=raw
+
+# 3. Provider seç
+export LLM_PROVIDER=groq
+
+# 4. Cache açık (default)
+export RAG_ANSWER_CACHE=true
+
+# 5. İlk seferlik index (~5-10 dk, ChromaDB'ye yazılır)
+yargi-qa --load-corpus
+
+# 6. Sor
+yargi-qa --ask "Muvazaalı tapu satışında mirasçı hangi davayı açar?"
+# → İlk sorgu: ~3s (Groq LLM)
+# → Tekrar: ~1.9s (cache HIT)
+```
+
+### v1.3.0 Test Sonuçları
+
+- **5/5 smoke test** geçti (import, factory, cache init, store+lookup, RAG init)
+- **Cache HIT benchmark**: 52.5s → 1.86s (28.3x speedup, score=1.0000)
+- Test dosyaları:
+  - `tests/v13_rag_cache_results.json` — benchmark sonuçları
+  - 5/5 smoke test, 1/1 RAG benchmark
+
+---
+
 ## Hukuki QA Chatbot (RAG) — v1.2.0 (ChromaDB Kalıcı Store)
 
 v1.2.0, RAG pipeline'ına **ChromaDB kalıcı vector store** + **token-aware chunking** ekler. Bir kez indexlenen kararlar process restart'ında kaybolmaz, sorgular sub-second hızda döner.
