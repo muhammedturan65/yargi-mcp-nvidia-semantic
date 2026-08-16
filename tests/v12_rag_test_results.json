@@ -1,0 +1,143 @@
+{
+  "version": "1.2.0",
+  "test_type": "rag_pipeline",
+  "chroma_count": 70,
+  "retrieval_benchmark": {
+    "avg_ms": 1053.5837173461914,
+    "results": [
+      {
+        "question": "Mirasçı muvazaalı satışa karşı hangi davayı açar?",
+        "elapsed_ms": 1353.808879852295,
+        "num_results": 5,
+        "top_score": 0.5275006890296936
+      },
+      {
+        "question": "Muvazaa iddiasında ispat yükü kimdedir?",
+        "elapsed_ms": 1147.0608711242676,
+        "num_results": 5,
+        "top_score": 0.4157131314277649
+      },
+      {
+        "question": "Tapu iptal davası açma süresi nedir?",
+        "elapsed_ms": 1063.6422634124756,
+        "num_results": 5,
+        "top_score": 0.5036240816116333
+      },
+      {
+        "question": "Muris muvazaası nedir ve nasıl ispatlanır?",
+        "elapsed_ms": 395.49922943115234,
+        "num_results": 5,
+        "top_score": 0.3899036645889282
+      },
+      {
+        "question": "Tapu iptal ve tescil davasında görevli mahkeme",
+        "elapsed_ms": 1307.9073429107666,
+        "num_results": 5,
+        "top_score": 0.6090452671051025
+      }
+    ]
+  },
+  "rag_results": [
+    {
+      "question": "Mirasçı muvazaalı satışa karşı hangi davayı açar?",
+      "expected_keyword": "tapu iptal ve tescil davası",
+      "has_expected_keyword": false,
+      "total_time_s": 241.75604152679443,
+      "retrieval_ms": 827.0037174224854,
+      "generation_ms": 240928.77173423767,
+      "llm_usage": {
+        "prompt_tokens": 3371,
+        "completion_tokens": 603,
+        "total_tokens": 3974
+      },
+      "llm_model": "meta/llama-3.1-70b-instruct",
+      "embedding_model": "nvidia/nv-embed-v1",
+      "citations_count": 5,
+      "answer_length": 1675,
+      "answer_preview": "Mirasçı muvazaalı satışa karşı tapu iptali ve tescil davası açabilir. [1] Yargıtay 7. Hukuk Dairesi, E.2026/2403, K.2026/3418 (23.06.2026) kararında, davalı ...'ın babası ile davacı arasındaki satış vaadi sözleşmesini bildiği ve muvazaalı olarak taşınmazı devraldığının kabulü gerektiği, davalı ...'a",
+      "citations": [
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2026/2403",
+          "karar": "2026/3418",
+          "score": 0.5275006890296936
+        },
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2025/5182",
+          "karar": "2026/3517",
+          "score": 0.526723325252533
+        },
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2026/3152",
+          "karar": "2026/3491",
+          "score": 0.5176607370376587
+        },
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2026/2377",
+          "karar": "2026/3419",
+          "score": 0.4833524227142334
+        },
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2025/4714",
+          "karar": "2026/3563",
+          "score": 0.4826015830039978
+        }
+      ]
+    },
+    {
+      "question": "Muvazaa iddiasında ispat yükü kimdedir?",
+      "expected_keyword": "iddia sahibi taraf",
+      "has_expected_keyword": false,
+      "total_time_s": 72.59305548667908,
+      "retrieval_ms": 560.6164932250977,
+      "generation_ms": 72032.1946144104,
+      "llm_usage": {
+        "prompt_tokens": 3120,
+        "completion_tokens": 696,
+        "total_tokens": 3816
+      },
+      "llm_model": "meta/llama-3.1-70b-instruct",
+      "embedding_model": "nvidia/nv-embed-v1",
+      "citations_count": 5,
+      "answer_length": 1914,
+      "answer_preview": "Muvazaa iddiasında ispat yükü, iddianın sahibi tarafından karşı tarafa aittir. [1] Yargıtay 7. Hukuk Dairesi'nin 2025/5182 E. ve 2026/3517 K. sayılı kararında, davalı vekili murisin okuma-yazma bilmediği iddiası ile davaya konu ölünceye kadar bakma sözleşmesine sol el başparmak izini bastığını, anca",
+      "citations": [
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2025/5182",
+          "karar": "2026/3517",
+          "score": 0.4157131314277649
+        },
+        {
+          "birim": "7. Ceza Dairesi",
+          "esas": "2025/4256",
+          "karar": "2026/7612",
+          "score": 0.3976322412490845
+        },
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2026/3152",
+          "karar": "2026/3491",
+          "score": 0.3820990324020386
+        },
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2025/4714",
+          "karar": "2026/3563",
+          "score": 0.36710280179977417
+        },
+        {
+          "birim": "7. Hukuk Dairesi",
+          "esas": "2026/2403",
+          "karar": "2026/3418",
+          "score": 0.3651435971260071
+        }
+      ]
+    }
+  ],
+  "speedup_vs_v1_1_0": 113.89697659931645
+}

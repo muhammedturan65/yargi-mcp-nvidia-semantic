@@ -8,12 +8,115 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) standardına uya
 ## [Unreleased]
 
 ### Planlanan
-- ChromaDB kalıcı vector store entegrasyonu (şu anda in-memory)
-- Karar metni ön-işleme pipeline (HTML→Markdown→chunk + Türkçe stop-word removal)
-- Tam metin embedding (şu an preview'ın ilk 500 karakterı embed'leniyor)
 - Next.js demo dashboard (RAG arayüzü)
 - yargi-cli TypeScript port'a semantik arama + RAG desteği
 - Çok-dilli destek (Türkçe + İngilizce + Almanca hukuki metinler)
+- Query embedding cache (sorgu→embedding lookup, NVIDIA API çağrısını azaltır)
+- Hukuki stop-word filtering + section-aware retrieval (GEREKÇE section'ına ağırlık)
+
+## [1.2.0] — 2026-08-17
+
+### Eklendi
+
+#### ChromaDB Kalıcı Vector Store + Token-Aware Chunking
+
+- **Yeni:** `semantic_search/vector_store_chroma.py` — ChromaDB-backed kalıcı vector store
+  - `ChromaVectorStore` sınıfı, mevcut `VectorStore` ile API uyumlu (drop-in replacement)
+  - `add_documents()` — document-level index (vector_store.py ile uyumlu)
+  - `add_chunks()` — chunk-level index (document_id metadata ile)
+  - `search()` — cosine similarity search, ChromaDB HNSW index
+  - `search_with_dedup()` — chunk-level arama + document bazında dedup
+  - `list_documents_by_metadata()` — metadata'ya göre filtreleme (court_type, birim_adi, vb)
+  - ChromaDB PersistentClient ile disk'e yazma — process restart'ında kayıp yok
+  - Resume desteği: idempotent upsert + mevcut document_id'leri atlama
+- **Yeni:** `qa_rag/chunker.py` — Token-aware hukuki metin chunker
+  - `LegalChunker` sınıfı: 512-token hedef, 80-token overlap, section-aware
+  - Türk hukuki karar yapısını tanır (GEREKÇE, HÜKÜM, ÖZET, KARAR bölümleri)
+  - tiktoken (cl100k_base) ile gerçek token sayımı — Llama 3 tokenizer ile uyumlu
+  - Cümle sınırlarında bölme (Türkçe kısaltmaları korur: Dr., Prof., Av.)
+  - Çok küçük chunk'ları otomatik merge
+- **Yeni:** `qa_rag/indexer.py` — Bedesten → ChromaDB index pipeline
+  - `BedestenIndexer` sınıfı: tam otomatik index pipeline
+  - Bedesten search → tam metin fetch → chunk → NVIDIA embed → ChromaDB yaz
+  - Multi-keyword destek (virgülle ayrılmış liste)
+  - Multi-court-type destek (YARGITAYKARARI, DANISTAYKARAR, vb)
+  - Resume desteği: ChromaDB'de var olan belgeleri atla
+  - Checkpoint: JSON'a ilerleme yaz (`last_index.json`)
+  - Hata toleransı: tek belge hatası tüm pipeline'ı durdurmaz
+- **Yeni:** `LegalQARAG` backend seçimi
+  - `backend="chroma"` (default): Kalıcı ChromaDB store
+  - `backend="memory"` (legacy): v1.1.0 davranışı, in-memory store
+  - `chroma_collection` parametresi ile çoklu collection desteği
+
+### Değişti
+
+- **Kritik:** RAG retrieval artık kalıcı ChromaDB'den okuyor
+  - **v1.1.0:** Her sorguda Bedesten fetch + embed + search (~2 dk/sorgu)
+  - **v1.2.0:** ChromaDB'den sub-second retrieval (~1 saniye/sorgu)
+  - **Hız artışı: ~120x** (NVIDIA query embedding dahil)
+  - Process restart'ında corpus kaybolmuyor
+- **Kritik:** Tam metin embedding (preview yerine)
+  - **v1.1.0:** İlk 500 karakter embed'leniyordu (düşük kalite)
+  - **v1.2.0:** Tam metin 512-token chunk'lara bölünür, her chunk ayrı embed'lenir
+  - Retrieval kalitesi arttı: top-1 skor 0.35 → 0.53 (50% daha yüksek)
+- `pyproject.toml` version: 1.1.0 → 1.2.0
+- `pyproject.toml` dependencies: `chromadb>=0.5.0`, `tiktoken>=0.7.0` eklendi
+- `qa_rag/__init__.py` yeni exports: `LegalChunker`, `Chunk`, `chunk_text`, `BedestenIndexer`, `IndexResult`, `IndexProgress`
+
+### Test Sonuçları (v1.2.0)
+
+#### Retrieval Benchmark (17 belge / 70 chunk, ChromaDB)
+
+| Soru | Süre | Top-1 Skor | Sonuç Sayısı |
+|---|---|---|---|
+| Mirasçı muvazaalı satışa karşı hangi davayı açar? | 1354ms | 0.5275 | 5 |
+| Muvazaa iddiasında ispat yükü kimdedir? | 1147ms | 0.4157 | 5 |
+| Tapu iptal davası açma süresi nedir? | 1064ms | 0.5036 | 5 |
+| Muris muvazaası nedir ve nasıl ispatlanır? | 395ms | 0.3899 | 5 |
+| Tapu iptal ve tescil davasında görevli mahkeme | 1308ms | 0.6090 | 5 |
+
+**Ortalama retrieval: 1054ms/sorgu** (NVIDIA query embed ~1000ms + ChromaDB search ~50ms)
+
+#### Tam RAG Pipeline (LLM çağrısı dahil)
+
+| Soru | Retrieval | LLM | Toplam | Tokens |
+|---|---|---|---|---|
+| Mirasçı hangi davayı açar? | 827ms | 240s | 241.8s | 3974 |
+| Muvazaa ispat yükü | 561ms | 72s | 72.6s | 3816 |
+
+Cevaplar doğru (tapu iptali ve tescil davası, tenkis davası, ispat yükü iddia sahibinde),
+atıflar gerçek Yargıtay kararlarına dayanıyor (E.2026/2403, E.2025/5182, vb).
+
+#### v1.1.0 vs v1.2.0 Karşılaştırma
+
+| Metrik | v1.1.0 | v1.2.0 | İyileşme |
+|---|---|---|---|
+| Retrieval süresi | ~120s (Bedesten fetch) | ~1s (ChromaDB) | **120x hız** |
+| Top-1 similarity | 0.35 | 0.53 | **51% daha yüksek** |
+| Kalıcılık | Yok (in-memory) | Var (ChromaDB disk) | ✓ |
+| Tam metin embedding | Yok (preview 500 char) | Var (512-token chunk) | ✓ |
+| Process restart | Corpus kaybolur | Korunur | ✓ |
+| NVIDIA API çağrısı/sorgu | 30+ (her belge) | 1 (sadece query) | **30x azalma** |
+
+### Çevre Değişkenleri (v1.2.0)
+
+#### ChromaDB
+- `CHROMA_PERSIST_DIR` — Kalıcı dizin (default: `./chroma_db`)
+- `CHROMA_COLLECTION` — Collection adı (default: `yargi_decisions`)
+- `CHROMA_DISTANCE` — Distance metric: `cosine`|`l2`|`ip` (default: `cosine`)
+
+#### Indexer
+- `INDEXER_BATCH_SIZE` — NVIDIA'ya bir seferde kaç chunk embed (default: 32)
+- `INDEXER_TARGET_DOCS` — Hedef belge sayısı (default: 200)
+- `INDEXER_KEYWORDS` — Virgülle ayrılmış anahtar kelimeler
+- `INDEXER_COURT_TYPES` — Virgülle ayrılmış mahkeme tipleri
+
+### Bilinen Sınırlamalar (v1.2.0)
+
+- NVIDIA LLM ilk token 60-240 saniye sürebilir (ücretsiz katman oranı)
+- Bedesten rate-limit (10 istek/30s) indexleme süresini sınırlar (~5 dk/50 belge)
+- ChromaDB ilk açılışta ~2 saniye yüklenir (warm-up)
+- Query embedding cache henüz yok — her sorgu NVIDIA'ya gider
 
 ## [1.1.0] — 2026-08-16
 

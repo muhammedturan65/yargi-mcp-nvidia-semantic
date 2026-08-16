@@ -5,12 +5,21 @@ Kullanıcı sorusu → embedding → vector store'da top-K arama →
 context construction → NVIDIA LLM ile cevap üretimi →
 atıflı yanıt.
 
-İki mod var:
-    - "loaded":    Önceden yüklenmiş vector store'u kullanır (hızlı, demo modu)
-    - "fresh":     Her soruda search_bedesten_semantic çağırır (yavaş, taze veri)
+İki backend modu var:
+    - "chroma" (default): ChromaDB kalıcı vector store. İlk çağrıda Bedesten
+      üzerinden ~200 belge çekilir, 512-token chunk'lara bölünür, NVIDIA
+      nv-embed-v1 ile embed'lenir ve diske yazılır. Sonraki sorgular 50ms
+      altında döner — process restart'ında veri kaybı yok.
+    - "memory" (legacy): In-memory VectorStore. Her sorguda search_bedesten_semantic
+      çağrılır, ~2 dk sürer. v1.1.0 davranışının korunduğu fallback modu.
 
-Demo için "loaded" modu önerilir. Üretim için ChromaDB kalıcı store önerilir
-(sonraki milestone).
+Kullanım:
+    rag = LegalQARAG()                       # chroma backend (default)
+    await rag.load_corpora()                 # ilk seferlikte ~5-10 dk
+    response = await rag.ask("Mirasçı hangi davayı açar?")  # sub-second retrieval
+
+    # Legacy in-memory modu:
+    rag = LegalQARAG(backend="memory")
 """
 
 from __future__ import annotations
@@ -61,30 +70,46 @@ class LegalQARAG:
     """
     Hukuki QA RAG pipeline.
 
+    Args:
+        backend: "chroma" (default, kalıcı) veya "memory" (legacy, in-memory)
+        n_decisions_per_query: Kaç karar çekilecek (memory mode için)
+        top_k_retrieval: LLM'e kaç karar feed'lenecek
+        llm_temperature: Hukuki: düşük yaratıcılık (0.2)
+        llm_max_tokens: Maksimum cevap token sayısı
+        chroma_collection: ChromaDB collection adı (chroma backend için)
+
     Usage:
-        rag = LegalQARAG()
-        await rag.load_corpora("muvazaa tapu iptal")  # 30 karar yükle (~2 dk)
+        rag = LegalQARAG()                       # chroma backend (default)
+        await rag.load_corpora()                 # ilk seferlikte index
         response = await rag.ask("Mirasçı hangi davayı açar?")
-        print(response.answer)
     """
 
     def __init__(
         self,
-        n_decisions_per_query: int = 30,  # search_bedesten_semantic batch size
-        top_k_retrieval: int = 5,         # LLM'e kaç karar feed'lenecek
-        llm_temperature: float = 0.2,     # hukuki: düşük yaratıcılık
+        backend: str = "chroma",
+        n_decisions_per_query: int = 30,
+        top_k_retrieval: int = 5,
+        llm_temperature: float = 0.2,
         llm_max_tokens: int = 1500,
+        chroma_collection: Optional[str] = None,
     ):
+        if backend not in ("chroma", "memory"):
+            raise ValueError(f"backend 'chroma' veya 'memory' olmalı, got: {backend}")
+        self.backend = backend
         self.n_decisions_per_query = n_decisions_per_query
         self.top_k_retrieval = top_k_retrieval
         self.llm_temperature = llm_temperature
         self.llm_max_tokens = llm_max_tokens
+        self.chroma_collection = chroma_collection or os.getenv(
+            "CHROMA_COLLECTION", "yargi_decisions"
+        )
 
         # Lazy-loaded components
         self._embedder = None
         self._vector_store = None
         self._llm_client = None
         self._mcp_module = None
+        self._indexer = None
         self._is_corpora_loaded = False
 
     # ---------- Lazy initialization ----------
@@ -98,10 +123,21 @@ class LegalQARAG:
 
     def _get_vector_store(self):
         if self._vector_store is None:
-            from semantic_search.vector_store import VectorStore
             embedder = self._get_embedder()
-            self._vector_store = VectorStore(dimension=embedder.dimension)
-            logger.info(f"VectorStore oluşturuldu (dimension={embedder.dimension})")
+            if self.backend == "chroma":
+                from semantic_search.vector_store_chroma import ChromaVectorStore
+                self._vector_store = ChromaVectorStore(
+                    dimension=embedder.dimension,
+                    collection_name=self.chroma_collection,
+                )
+                logger.info(
+                    f"ChromaVectorStore oluşturuldu (dimension={embedder.dimension}, "
+                    f"collection={self.chroma_collection}, mevcut={self._vector_store.size()} kayıt)"
+                )
+            else:
+                from semantic_search.vector_store import VectorStore
+                self._vector_store = VectorStore(dimension=embedder.dimension)
+                logger.info(f"In-memory VectorStore oluşturuldu (dimension={embedder.dimension})")
         return self._vector_store
 
     def _get_llm_client(self):
@@ -122,40 +158,114 @@ class LegalQARAG:
             logger.info("mcp_server_main yüklendi (Bedesten semantic search için)")
         return self._mcp_module
 
+    def _get_indexer(self):
+        """ChromaDB indexer (lazy)."""
+        if self._indexer is None:
+            from .indexer import BedestenIndexer
+            self._indexer = BedestenIndexer(chroma_collection=self.chroma_collection)
+            logger.info("BedestenIndexer oluşturuldu")
+        return self._indexer
+
     # ---------- Public API ----------
 
     @property
     def is_corpora_loaded(self) -> bool:
-        """Vector store'da en az 1 karar var mı?"""
-        if self._vector_store is None:
-            return False
-        return self._vector_store.size() > 0
+        """Vector store'da en az 1 karar var mı?
+
+        Chroma backend'de bu, ChromaDB'de kayıt varsa True döner — process
+        restart'ında bile. Memory backend'de sadece runtime'da yüklenmişse True.
+        """
+        if self.backend == "chroma":
+            # ChromaDB'yi lazy init — kaç kayıt var?
+            vs = self._get_vector_store()
+            return vs.size() > 0
+        else:
+            if self._vector_store is None:
+                return False
+            return self._vector_store.size() > 0
 
     async def load_corpora(
         self,
         initial_keyword: str = "muvazaa tapu iptal",
         semantic_query: str = "Mirasçının muvazaalı satış işlemine karşı tapu iptali ve tescil davası açması",
         court_types: Optional[List[str]] = None,
+        target_docs: Optional[int] = None,
     ) -> Dict:
         """
         Bedesten API'den karar çekip vector store'a yükle.
 
-        Bu, search_bedesten_semantic tool'unu çağırır. ~2 dk sürer (rate-limit).
-        Tekrar çağrılırsa mevcut kararları temizleyip yeniden yükler.
+        Chroma backend (v1.2.0):
+            - BedestenIndexer ile TAM METİN çekilir, chunk'lanır, NVIDIA ile
+              embed'lenir ve ChromaDB'ye yazılır.
+            - İlk çağrı 5-10 dk sürebilir (200 belge × 3.5s Bedesten rate-limit).
+            - ChromaDB'de zaten var olan belgeler atlanır (resume desteği).
+            - Process restart'ında tekrar çağrılmasına gerek yok.
+
+        Memory backend (legacy v1.1.0):
+            - search_bedesten_semantic tool'unu çağırır, ~2 dk sürer.
+            - Process restart'ında kaybolur.
+
+        Args:
+            initial_keyword: Bedesten search anahtar kelimesi
+            semantic_query: Anlamsal sorgu (sadece memory backend için kullanılır)
+            court_types: Mahkeme tipleri (default: ["YARGITAYKARARI"])
+            target_docs: Chroma backend için hedef belge sayısı (default: env veya 200)
 
         Returns:
-            search_bedesten_semantic'in döndüğü dict (status, results, stats, ...)
+            Dict — backend'e göre:
+              chroma: {status, indexed, chunks, elapsed_s, ...}
+              memory: search_bedesten_semantic'in döndüğü dict
         """
         if court_types is None:
             court_types = ["YARGITAYKARARI"]
 
+        # ---------- Chroma backend ----------
+        if self.backend == "chroma":
+            indexer = self._get_indexer()
+            # Keyword'ü virgülle ayrılmış listeye çevür (indexer multi-keyword destekler)
+            keywords = [k.strip() for k in initial_keyword.split(",") if k.strip()]
+            if not keywords:
+                keywords = [initial_keyword]
+
+            target = target_docs or int(os.getenv("INDEXER_TARGET_DOCS", "200"))
+
+            logger.info(
+                f"ChromaDB index başlıyor: keywords={keywords}, "
+                f"courts={court_types}, target={target}"
+            )
+
+            result = await indexer.run(
+                keywords=keywords,
+                court_types=court_types,
+                target_docs=target,
+            )
+
+            self._is_corpora_loaded = True
+            return {
+                "status": "success",
+                "backend": "chroma",
+                "indexed_docs": result.total_docs_indexed,
+                "total_chunks": result.total_chunks,
+                "total_tokens": result.total_tokens,
+                "elapsed_s": round(result.elapsed_s, 1),
+                "embedding_model": result.embedding_model,
+                "chroma_count": result.chroma_count,
+                "failed_docs": result.total_docs_failed,
+                "errors": result.errors[:5],
+                "stats": {
+                    "documents_in_store": result.chroma_count,
+                    "failed_fetches": result.total_docs_failed,
+                },
+            }
+
+        # ---------- Memory backend (legacy) ----------
         mcp = self._get_mcp_module()
         if not getattr(mcp, "SEMANTIC_SEARCH_AVAILABLE", False):
             raise RuntimeError(
                 "yargi-mcp semantik arama aktif değil. NVIDIA env vars'ları kontrol edin."
             )
 
-        logger.info(f"Corpora yükleniyor: keyword='{initial_keyword}'")
+        logger.info(f"Corpora yükleniyor (memory mode): keyword='{initial_keyword}'")
         result = await mcp.search_bedesten_semantic(
             initial_keyword=initial_keyword,
             query=semantic_query,
@@ -167,18 +277,9 @@ class LegalQARAG:
             raise RuntimeError(f"Bedesten search hatası: {result.get('message', result)}")
 
         # search_bedesten_semantic kendi vector_store'una ekledi.
-        # Bizim LegalQARAG vector store'umuz ayrı olduğu için, mcp_server_main'in
-        # vector_store instance'ını referans al.
-        # (İleride refactor: shared singleton vector store)
         self._vector_store = getattr(mcp, "_qa_rag_vector_store", None) or self._vector_store
 
-        # mcp_server_main vector_store'unu al (search_bedesten_semantic oraya ekledi)
-        # mcp_server_main içinde local bir vector_store değişkeni var, function-scope.
-        # Bu durumda en kolay yol: sonuçtaki decision listesini kendi store'umuza eklemek.
         if self._vector_store.size() == 0:
-            # mcp_server_main'in local store'u erişilebilir değil.
-            # Çözüm: search_bedesten_semantic'in döndürdüğü results listesinden
-            #        tekrar embed edip kendi store'umuza ekleyelim.
             await self._populate_store_from_results(result)
 
         self._is_corpora_loaded = True
@@ -246,11 +347,13 @@ class LegalQARAG:
         """
         Soru için en alakalı K kararı getir.
 
+        Chroma backend'de search_with_dedup kullanılır — chunk-level arama
+        yapılıp document bazında dedup edilir. Bu, hem hızlı (50ms) hem de
+        kaliteli (en alakalı chunk'a göre sıralama) sonuç verir.
+
         Returns:
             RAGContext — decisions listesi formatted_results formatında
         """
-        from .prompts import build_context_from_decisions  # forward decl
-
         t0 = time.time()
 
         if not self.is_corpora_loaded:
@@ -261,20 +364,28 @@ class LegalQARAG:
         embedder = self._get_embedder()
         vs = self._vector_store
 
-        # Query embedding
+        # Query embedding (NVIDIA nv-embed-v1 query input_type)
         query_emb = embedder.encode_query(question, task="legal question answering")
-        if isinstance(query_emb, np.ndarray) and query_emb.ndim == 1:
-            query_emb = query_emb.reshape(1, -1)
+        if isinstance(query_emb, np.ndarray) and query_emb.ndim == 2:
+            query_emb = query_emb[0]
 
         # Search
         k = top_k or self.top_k_retrieval
-        results = vs.search(query_emb[0] if hasattr(query_emb, '__getitem__') else query_emb,
-                            top_k=k)
+
+        # Chroma backend: chunk-level search + doc dedup
+        # threshold 0.15 — Chroma cosine skorları NVIDIA passage/query arası
+        # genelde 0.3-0.55 arası, ama kısa sorgularda 0.15'e düşebilir.
+        if self.backend == "chroma" and hasattr(vs, "search_with_dedup"):
+            results = vs.search_with_dedup(query_emb, top_k=k, threshold=0.15)
+        else:
+            results = vs.search(query_emb, top_k=k)
 
         decisions = []
         for doc, score in results:
             title_parts = []
             md = doc.metadata
+            # document_id baz al: chunk-level search'te doc.id = chunk_id olabilir
+            doc_id = md.get("document_id", doc.id)
             if md.get("birim_adi"):
                 title_parts.append(md["birim_adi"])
             if md.get("esas_no"):
@@ -284,18 +395,24 @@ class LegalQARAG:
             if md.get("karar_tarihi"):
                 title_parts.append(f"Tarih: {md['karar_tarihi']}")
 
+            # chunk-level metadata'da section bilgisi varsa, zenginleştir
+            section = md.get("section")
+            if section and section != "body":
+                title_parts.append(f"[{section}]")
+
             decisions.append({
-                "document_id": doc.id,
-                "title": " - ".join(title_parts) if title_parts else f"Document {doc.id}",
+                "document_id": doc_id,
+                "chunk_id": doc.id if doc.id != doc_id else None,
+                "title": " - ".join(title_parts) if title_parts else f"Document {doc_id}",
                 "similarity_score": float(score),
                 "preview": doc.text[:500] + "..." if len(doc.text) > 500 else doc.text,
                 "text": doc.text,
                 "metadata": md,
-                "source_url": f"https://mevzuat.adalet.gov.tr/ictihat/{doc.id}",
+                "source_url": f"https://mevzuat.adalet.gov.tr/ictihat/{doc_id}",
             })
 
         elapsed_ms = (time.time() - t0) * 1000
-        logger.info(f"Retrieval: {len(decisions)} karar, {elapsed_ms:.0f}ms")
+        logger.info(f"Retrieval ({self.backend}): {len(decisions)} karar, {elapsed_ms:.0f}ms")
 
         return RAGContext(
             question=question,

@@ -167,9 +167,9 @@ hello.py
 *.html
 fast-mcp-docs.md
 
-# Debug and test files
-debug_*
-test_*
+# Debug and test files (sadece root seviyesinde, tests/ altında DEĞİL)
+/debug_*
+/test_*
 CLAUDE.md
 
 # ASGI/Deployment files
@@ -229,3 +229,11 @@ semantic_results.json
 __pycache__/
 *.pyc
 *.egg-info/
+
+# ChromaDB local data (v1.2.0) — kullanıcı kendi dizinini yaratır
+chroma_db/
+chroma_db_*/
+*.sqlite3
+
+# tiktoken cache
+*/tiktoken_cache/

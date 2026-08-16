@@ -196,7 +196,162 @@ Orijinal yargi-mcp projesi MIT lisansı altında dağıtılmaktadır. Bu fork da
 
 ---
 
-## Hukuki QA Chatbot (RAG) — v1.1.0
+## Hukuki QA Chatbot (RAG) — v1.2.0 (ChromaDB Kalıcı Store)
+
+v1.2.0, RAG pipeline'ına **ChromaDB kalıcı vector store** + **token-aware chunking** ekler. Bir kez indexlenen kararlar process restart'ında kaybolmaz, sorgular sub-second hızda döner.
+
+### Mimari
+
+```
+                     ┌─────────────────────────────────────┐
+                     │  BedestenIndexer (tek seferlik)     │
+                     │                                     │
+Bedesten API ──────► │  search → fetch full text → chunk   │
+                     │     ↓                               │
+                     │  NVIDIA nv-embed-v1 (passage)       │
+                     │     ↓                               │
+                     │  ChromaDB.add_chunks()              │
+                     └─────────────────┬───────────────────┘
+                                       │ (disk - kalıcı)
+                                       ▼
+                     ┌─────────────────────────────────────┐
+Kullanıcı sorusu ──► │  LegalQARAG.ask()                   │
+                     │   1. NVIDIA nv-embed-v1 (query)     │ ~1s
+                     │   2. ChromaDB.search_with_dedup()   │ ~50ms
+                     │   3. build_context_from_decisions() │
+                     │   4. NVIDIA Llama 3.1 70B           │ ~60-240s
+                     └─────────────────┬───────────────────┘
+                                       ▼
+                            Atıflı cevap: "tapu iptali ve tescil davası açar.
+                            [1] Yargıtay 7. HD, E.2026/2403, K.2026/3418"
+```
+
+### Modül Yapısı (v1.2.0)
+
+```
+qa_rag/
+├── __init__.py        # Modül girişi + exports
+├── llm_client.py      # NVIDIA LLM client (sync + async + streaming)
+├── prompts.py         # Türk hukuki system prompt + context builder
+├── citations.py       # Atıf formatlama
+├── rag_engine.py      # LegalQARAG (chroma/memory backend seçimi)
+├── chunker.py         # LegalChunker — 512-token, section-aware
+├── indexer.py         # BedestenIndexer — Bedesten → ChromaDB pipeline
+├── cli.py             # yargi-qa interaktif REPL + --ask modu
+└── api.py             # FastAPI app (REST + SSE streaming)
+
+semantic_search/
+├── embedder.py        # NVIDIA nv-embed-v1 embedder (query/passage asimetrik)
+├── vector_store.py    # In-memory VectorStore (v1.0.0'dan)
+└── vector_store_chroma.py  # ChromaDB kalıcı store (v1.2.0)
+```
+
+### v1.1.0 → v1.2.0 İyileştirmeler
+
+| Metrik | v1.1.0 | v1.2.0 |
+|---|---|---|
+| Retrieval süresi | ~120s (her sorguda Bedesten fetch) | ~1s (ChromaDB'den okuma) |
+| Top-1 similarity | 0.35 | **0.53** (+51%) |
+| Kalıcılık | Yok (in-memory) | **Var** (ChromaDB disk) |
+| Tam metin embedding | Yok (500 char preview) | **Var** (512-token chunk) |
+| Process restart | Corpus kaybolur | **Korunur** |
+| NVIDIA API çağrısı/sorgu | 30+ (her belge) | **1** (sadece query) |
+
+### Kurulum (v1.2.0)
+
+```bash
+# ChromaDB + tiktoken otomatik kurulur (pyproject.toml dependencies)
+cd yargi-mcp-nvidia-semantic
+pip install -e ".[qa]"
+
+# NVIDIA API key
+export NVIDIA_API_KEY=nvapi-...
+
+# ChromaDB kalıcı dizini (default: ./chroma_db)
+export CHROMA_PERSIST_DIR=/path/to/chroma_db
+```
+
+### Kullanım — İlk Index (tek seferlik, ~5-10 dk)
+
+```python
+import asyncio
+from qa_rag import LegalQARAG
+
+async def main():
+    rag = LegalQARAG(backend="chroma")
+    # İlk sefer: 200 belge çek, chunk'la, embed'le, ChromaDB'ye yaz
+    result = await rag.load_corpora(
+        initial_keyword="muvazaa tapu iptal",
+        court_types=["YARGITAYKARARI"],
+        target_docs=200,
+    )
+    print(f"{result['indexed_docs']} belge, {result['total_chunks']} chunk indexlendi")
+    print(f"Süre: {result['elapsed_s']}s")
+
+asyncio.run(main())
+```
+
+### Kullanım — Sorgu (sub-second retrieval)
+
+```python
+rag = LegalQARAG(backend="chroma")
+# ChromaDB'de veri varsa is_corpora_loaded=True (process restart sonrası bile)
+print(rag.is_corpora_loaded)  # True
+
+response = await rag.ask("Mirasçı muvazaalı satışa karşı hangi davayı açar?")
+print(response.answer)
+print(f"Retrieval: {response.retrieval_time_ms}ms")  # ~1000ms
+print(f"LLM: {response.generation_time_ms}ms")       # ~60-240s
+```
+
+### Çevre Değişkenleri (v1.2.0)
+
+#### ChromaDB
+- `CHROMA_PERSIST_DIR` — Kalıcı dizin (default: `./chroma_db`)
+- `CHROMA_COLLECTION` — Collection adı (default: `yargi_decisions`)
+- `CHROMA_DISTANCE` — Distance metric: `cosine`|`l2`|`ip` (default: `cosine`)
+
+#### Indexer
+- `INDEXER_BATCH_SIZE` — NVIDIA'ya bir seferde kaç chunk embed (default: 32)
+- `INDEXER_TARGET_DOCS` — Hedef belge sayısı (default: 200)
+- `INDEXER_KEYWORDS` — Virgülle ayrılmış anahtar kelimeler
+- `INDEXER_COURT_TYPES` — Virgülle ayrılmış mahkeme tipleri
+
+### Bilinen Sınırlar
+
+1. **NVIDIA LLM yavaş** — İlk token 60-240 saniye. Streaming modu UX'i iyileştirir.
+2. **Bedesten rate-limit** — 10 istek/30s, indexleme süresini sınırlar (~5 dk/50 belge).
+3. **Query embedding cache yok** — Her sorgu NVIDIA'ya gider (NVIDIA embed ~1s).
+4. **Bedesten yurt dışı IP'leri engelleyebilir** — Türkiye lokasyonu gerekli.
+
+### Demo Senaryosu
+
+```bash
+# 1. İlk index (tek seferlik, ~5-10 dk)
+export NVIDIA_API_KEY=nvapi-...
+export CHROMA_PERSIST_DIR=$HOME/yargi_chroma
+python -c "
+import asyncio
+from qa_rag import LegalQARAG
+async def m():
+    rag = LegalQARAG(backend='chroma')
+    r = await rag.load_corpora(target_docs=50)
+    print(r)
+asyncio.run(m())
+"
+
+# 2. API başlat (artık ChromaDB'de veri var, anında hazır)
+yargi-qa-api &
+
+# 3. Soru sor (sub-second retrieval)
+curl -X POST http://localhost:8001/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Muvazaalı satışta mirasçının hakları nelerdir?"}'
+```
+
+---
+
+## Hukuki QA Chatbot (RAG) — v1.1.0 (legacy, in-memory)
 
 Bu sürüm, semantik arama pipeline'ının üzerine bir **RAG tabanlı hukuki asistan** ekler. Kullanıcı doğal dilde soru sorar, sistem en alakalı emsal kararları bulur ve NVIDIA LLM ile atıflı cevap üretir.
 
