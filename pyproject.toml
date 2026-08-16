@@ -1,12 +1,12 @@
 [project]
 name = "yargi-mcp"
-version = "1.3.0"
-description = "MCP Server For Turkish Legal Databases + NVIDIA Semantic Search + RAG QA + ChromaDB + Multi-provider LLM + Answer Cache"
+version = "1.4.0"
+description = "MCP Server For Turkish Legal Databases + NVIDIA Semantic Search + RAG QA + ChromaDB + Multi-provider LLM + Answer Cache + Query Embedding Cache"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "Said Surucu", email = "saidsrc@gmail.com"}]
-keywords = ["mcp", "turkish-law", "legal", "yargitay", "danistay", "bddk", "btk", "kvkk", "turkish", "law", "court", "decisions", "rag", "nvidia", "groq", "openai", "ollama", "semantic-search", "embeddings", "chromadb", "vector-store", "answer-cache"]
+keywords = ["mcp", "turkish-law", "legal", "yargitay", "danistay", "bddk", "btk", "kvkk", "turkish", "law", "court", "decisions", "rag", "nvidia", "groq", "openai", "ollama", "semantic-search", "embeddings", "chromadb", "vector-store", "answer-cache", "query-cache", "lru-cache"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Legal Industry",

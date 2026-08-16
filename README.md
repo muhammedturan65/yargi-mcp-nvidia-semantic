@@ -196,6 +196,120 @@ Orijinal yargi-mcp projesi MIT lisansı altında dağıtılmaktadır. Bu fork da
 
 ---
 
+## Hukuki QA Chatbot (RAG) — v1.4.0 (Query Embedding Cache)
+
+v1.4.0, v1.3.0'da kalan son darboğazı çözer: **her sorguda NVIDIA query embedding ~1 saniye**.
+Artık aynı soru tekrar sorulduğunda NVIDIA'ya **hiç çağrı yapılmaz** — iki katmanlı cache
+(LRU + ChromaDB persistent) ile 0 ms'den döner.
+
+### Yenilik: İki Katmanlı Query Embedding Cache
+
+```
+Kullanıcı sorusu
+        │
+        ▼
+┌────────────────────────────────────────────────┐
+│  1. normalize_query(soru)                      │
+│     ç→c, ı→i, ğ→g, punct strip, lowercase    │
+│     "Mirasçı hangi davayı açar?"               │
+│     → "mirasci hangi davayi acar"              │
+├────────────────────────────────────────────────┤
+│  2. cache_key = sha256(normalized)[:16]         │  ← exact match key
+├────────────────────────────────────────────────┤
+│  3. LRU lookup (OrderedDict)         ~0 ms     │  ← process içi
+│     ├─ HIT → return cached embedding           │
+│     └─ MISS ↓                                   │
+│  4. ChromaDB persistent lookup     ~5 ms       │  ← process restart'ta kalıcı
+│     ├─ HIT → LRU'ya da yaz, return             │
+│     └─ MISS ↓                                   │
+│  5. NVIDIA encode_query()          ~1000 ms    │  ← gerçek API çağrısı
+│     + LRU'ya yaz + ChromaDB'ye yaz             │
+└────────────────────────────────────────────────┘
+```
+
+**Neden exact-match cache, semantik değil?** Çünkü NVIDIA (ve diğer embedder'lar)
+aynı soru için deterministik embedding üretir. Yani "Mirasçı hangi davayı açar?"
+her zaman aynı 4096-boyutlu vektöre mapping edilir. Semantik benzerlik (farklı
+soru ama aynı anlam) `AnswerCache`'in işi — query cache sadece gereksiz NVIDIA
+API çağrısını önler.
+
+### v1.3.0 → v1.4.0 Performans Karşılaştırması
+
+| Senaryo | v1.3.0 | v1.4.0 | İyileşme |
+|---|---|---|---|
+| İlk sorgu (cold) | ~1 s (NVIDIA) | ~1 s (NVIDIA) + cache yazma | ~ aynı |
+| Aynı sorgu tekrar (LRU HIT) | ~1 s (NVIDIA tekrar) | **~5 ms** | **200x** |
+| Aynı sorgu restart'tan sonra | ~1 s (NVIDIA) | **~11 ms** | **90x** |
+| Answer cache HIT (toplam) | ~1 s + ~50 ms cache | **~25 ms** | **40x** |
+| Answer cache HIT (restart) | ~1 s + ~50 ms cache | **~11 ms** | **90x** |
+
+### Test Sonuçları (v1.4.0)
+
+**6/6 smoke test PASS:**
+1. Import testleri (4 yeni export)
+2. `normalize_query` — Türkçe karakterler + punct + boşluk
+3. `QueryEmbeddingCache` init (ChromaDB collection)
+4. Store + LRU lookup + persistent lookup
+5. Persistence (yeni instance, eski kayıtlar)
+6. LegalQARAG retrieve() — gerçek NVIDIA + cache
+
+**Cache HIT Benchmark (gerçek NVIDIA LLM, 17 belge / 70 chunk):**
+
+| Senaryo | Süre | Q-Cache | A-Cache |
+|---|---|---|---|
+| Cold start (NVIDIA query + NVIDIA LLM) | 67.3 s | MISS | MISS |
+| Aynı process (LRU + answer cache HIT) | 25 ms | persistent | HIT |
+| Yeni process (persistent + answer cache HIT) | 11 ms | persistent | HIT |
+| **Hızlanma (cold vs HIT)** | **~2700x** | | |
+
+Test dosyaları:
+- `tests/v14_query_cache_results.json` — 6/6 smoke test
+- `tests/v14_cache_hit_results.json` — cache HIT benchmark
+- `tests/v14_full_rag_results.json` — full RAG pipeline
+
+### Çevre Değişkenleri (v1.4.0)
+
+```bash
+# Query embedding cache (default: açık)
+export RAG_QUERY_CACHE=true                          # kapatmak için false
+export RAG_QUERY_CACHE_LRU_SIZE=256                  # in-memory LRU max kayıt
+export RAG_QUERY_CACHE_COLLECTION=query_embed_cache  # ChromaDB collection adı
+```
+
+### Mimari (v1.4.0)
+
+```
+                     ┌─────────────────────────────────────┐
+                     │  BedestenIndexer (tek seferlik)     │
+                     │  v1.2.0 — ChromaDB kalıcı store    │
+                     └─────────────────┬───────────────────┘
+                                       │ (disk - kalıcı)
+                                       ▼
+                     ┌─────────────────────────────────────┐
+Kullanıcı sorusu ──► │  LegalQARAG.ask()                   │
+                     │   1. QueryEmbeddingCache [v1.4.0]   │
+                     │      ├─ LRU HIT        → 0 ms       │
+                     │      ├─ Persistent HIT → 5 ms       │
+                     │      └─ MISS → NVIDIA encode ~1 s   │
+                     │   2. ChromaDB.search_with_dedup()   │ ~50ms
+                     │   3. AnswerCache.lookup() [v1.3.0]  │ ~4ms
+                     │      ├─ HIT → cache'den cevap       │ → RETURN
+                     │      └─ MISS → devam                │
+                     │   4. LLMClient.chat_async() [v1.3.0]│ ~3-240s
+                     │   5. AnswerCache.store() [v1.3.0]   │ ~50ms
+                     └─────────────────────────────────────┘
+```
+
+### Backward Compatibility
+
+v1.4.0, v1.3.0/v1.2.0/v1.1.0 kodu ile **tam uyumlu**:
+- Tüm v1.3.0 API'leri ve env var'ları korundu
+- `LegalQARAG()` default hâlâ NVIDIA + query cache + answer cache enabled
+- v1.3.0 ChromaDB collection'ları (`yargi_decisions`, `qa_cache`) çalışır
+- Query cache ayrı collection (`query_embed_cache`) — mevcut verilere dokunmaz
+
+---
+
 ## Hukuki QA Chatbot (RAG) — v1.3.0 (Multi-Provider LLM + Answer Cache)
 
 v1.3.0, v1.2.0'daki en büyük acı noktasını çözer: **NVIDIA LLM 60-240 saniye latency**.

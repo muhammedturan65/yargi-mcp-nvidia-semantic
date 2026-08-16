@@ -1,0 +1,25 @@
+{
+  "test": "v1.4.0 cache HIT benchmark",
+  "date": "2026-08-16 23:40:40",
+  "question": "Muvazaalı tapu devrinde mirasçının açacağı dava nedir ve ispat yükü kimdedir?",
+  "scenarios": {
+    "same_process_lru": {
+      "total_ms": 25.0,
+      "retrieval_ms": 22.8,
+      "generation_ms": 2.1,
+      "query_cache_source": "persistent",
+      "answer_cache_hit": true,
+      "answer_cache_score": 1.0
+    },
+    "new_process_persistent": {
+      "total_ms": 11.3,
+      "retrieval_ms": 8.4,
+      "generation_ms": 1.7,
+      "query_cache_source": "persistent",
+      "answer_cache_hit": true,
+      "answer_cache_score": 1.0
+    }
+  },
+  "nvidia_cold_start_reference_s": 60.0,
+  "speedup_vs_cold_start": 2402.3
+}

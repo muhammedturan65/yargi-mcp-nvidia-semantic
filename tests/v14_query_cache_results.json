@@ -1,0 +1,24 @@
+{
+  "test": "v1.4.0 query embedding cache smoke test",
+  "date": "2026-08-16 23:34:01",
+  "results": {
+    "imports": "PASS",
+    "normalize_query": "PASS",
+    "cache_init": "PASS",
+    "store_lookup": "PASS",
+    "persistence": "PASS",
+    "rag_retrieve": "PASS",
+    "rag_retrieve_metrics": {
+      "first_query_ms": 2415.0,
+      "second_query_ms_lru": 4.6,
+      "third_query_ms_persistent": 11.4,
+      "speedup_lru": 529.9,
+      "speedup_persistent": 211.9,
+      "first_query_results": 5,
+      "second_query_results": 5,
+      "third_query_results": 5,
+      "top_1_first": "7. Hukuk Dairesi - Esas: 2026/2403 - Karar: 2026/3418 - Tarih: 23.06.2026",
+      "top_1_score_first": 0
+    }
+  }
+}

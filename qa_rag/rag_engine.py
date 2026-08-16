@@ -1,9 +1,16 @@
 """
-RAG engine — yargi-mcp semantik arama + multi-provider LLM + answer cache.
+RAG engine — yargi-mcp semantik arama + multi-provider LLM + answer cache + query cache.
 
 Kullanıcı sorusu → embedding → vector store'da top-K arama →
 context construction → LLM ile cevap üretimi →
 atıflı yanıt.
+
+v1.4.0:
+    - Query embedding cache (RAG_QUERY_CACHE=true, default)
+      Aynı soru tekrar sorulduğunda NVIDIA query embedding çağrısı yapılmaz.
+      İki katmanlı: in-memory LRU (0 ms) + ChromaDB persistent (5 ms).
+      v1.3.0'da her sorguda ~1 s NVIDIA'ya gidiyordu, artık sadece ilk seferde.
+    - RAGResponse'a query_cache_hit + query_cache_source alanları eklendi.
 
 v1.3.0:
     - Multi-provider LLM (LLM_PROVIDER=nvidia|groq|openai|ollama)
@@ -37,6 +44,7 @@ Kullanım:
 
     # Cache kapatma:
     os.environ["RAG_ANSWER_CACHE"] = "false"
+    os.environ["RAG_QUERY_CACHE"] = "false"
 """
 
 from __future__ import annotations
@@ -67,6 +75,8 @@ class RAGContext:
     total_found: int = 0
     search_time_ms: float = 0.0
     query_embedding: Optional[object] = None  # v1.3.0+: reuse for cache lookup
+    query_cache_hit: bool = False              # v1.4.0+: query embedding cache hit mi
+    query_cache_source: str = "miss"           # v1.4.0+: "lru" | "persistent" | "miss"
 
 
 @dataclass
@@ -82,10 +92,13 @@ class RAGResponse:
     total_time_ms: float
     retrieval_time_ms: float
     generation_time_ms: float
-    # v1.3.0+ — cache metadata
+    # v1.3.0+ — answer cache metadata
     from_cache: bool = False
     cache_score: float = 0.0       # cache hit ise cosine score
     llm_provider: str = ""
+    # v1.4.0+ — query embedding cache metadata
+    query_cache_hit: bool = False
+    query_cache_source: str = "miss"   # "lru" | "persistent" | "miss"
 
 
 class LegalQARAG:
@@ -101,6 +114,7 @@ class LegalQARAG:
         chroma_collection: ChromaDB collection adı (chroma backend için)
         llm_provider: v1.3.0+ — "nvidia"|"groq"|"openai"|"ollama" (default: env LLM_PROVIDER)
         enable_answer_cache: v1.3.0+ — semantik answer cache (default: env RAG_ANSWER_CACHE)
+        enable_query_cache: v1.4.0+ — query embedding cache (default: env RAG_QUERY_CACHE)
 
     Usage:
         rag = LegalQARAG()                       # chroma backend (default)
@@ -124,6 +138,7 @@ class LegalQARAG:
         chroma_collection: Optional[str] = None,
         llm_provider: Optional[str] = None,
         enable_answer_cache: Optional[bool] = None,
+        enable_query_cache: Optional[bool] = None,
     ):
         if backend not in ("chroma", "memory"):
             raise ValueError(f"backend 'chroma' veya 'memory' olmalı, got: {backend}")
@@ -141,6 +156,11 @@ class LegalQARAG:
         if enable_answer_cache is not None:
             os.environ["RAG_ANSWER_CACHE"] = "true" if enable_answer_cache else "false"
         self._answer_cache = None  # lazy init
+
+        # v1.4.0+ — Query embedding cache (LRU + ChromaDB persistent)
+        if enable_query_cache is not None:
+            os.environ["RAG_QUERY_CACHE"] = "true" if enable_query_cache else "false"
+        self._query_cache = None  # lazy init
 
         # Lazy-loaded components
         self._embedder = None
@@ -202,6 +222,14 @@ class LegalQARAG:
             embedder = self._get_embedder()
             self._answer_cache = AnswerCache(dimension=embedder.dimension)
         return self._answer_cache
+
+    def _get_query_cache(self):
+        """v1.4.0+: Lazy-init query embedding cache (LRU + ChromaDB persistent)."""
+        if self._query_cache is None:
+            from .query_cache import QueryEmbeddingCache
+            embedder = self._get_embedder()
+            self._query_cache = QueryEmbeddingCache(dimension=embedder.dimension)
+        return self._query_cache
 
     def _get_mcp_module(self):
         """mcp_server_main modülünü lazy yükle (search_bedesten_semantic için)."""
@@ -400,6 +428,13 @@ class LegalQARAG:
         """
         Soru için en alakalı K kararı getir.
 
+        v1.4.0+ flow:
+            1. Query cache lookup (LRU → ChromaDB persistent)
+               - HIT  → cached embedding kullan, NVIDIA'ya GİTME
+               - MISS → NVIDIA encode_query çağır, cache'e yaz
+            2. ChromaDB search_with_dedup (chunk-level → doc dedup)
+            3. RAGContext (query_cache_hit + query_cache_source ile)
+
         Chroma backend'de search_with_dedup kullanılır — chunk-level arama
         yapılıp document bazında dedup edilir. Bu, hem hızlı (50ms) hem de
         kaliteli (en alakalı chunk'a göre sıralama) sonuç verir.
@@ -417,10 +452,30 @@ class LegalQARAG:
         embedder = self._get_embedder()
         vs = self._vector_store
 
-        # Query embedding (NVIDIA nv-embed-v1 query input_type)
-        query_emb = embedder.encode_query(question, task="legal question answering")
-        if isinstance(query_emb, np.ndarray) and query_emb.ndim == 2:
-            query_emb = query_emb[0]
+        # v1.4.0+ — Query cache lookup (LRU → ChromaDB persistent → NVIDIA)
+        query_cache = self._get_query_cache()
+        cache_hit = query_cache.lookup(question) if query_cache.enabled else None
+
+        if cache_hit is not None:
+            query_emb = cache_hit.embedding
+            cache_source = cache_hit.source  # "lru" or "persistent"
+            logger.info(
+                f"Query cache HIT ({cache_source}) — NVIDIA çağrısı atlandı"
+            )
+        else:
+            # Cache MISS — NVIDIA API çağrısı yap
+            t_nvidia_start = time.time()
+            query_emb = embedder.encode_query(question, task="legal question answering")
+            nvidia_ms = (time.time() - t_nvidia_start) * 1000
+            if isinstance(query_emb, np.ndarray) and query_emb.ndim == 2:
+                query_emb = query_emb[0]
+            logger.info(
+                f"Query cache MISS — NVIDIA encode_query {nvidia_ms:.0f}ms"
+            )
+            # Cache'e yaz (LRU + persistent)
+            if query_cache.enabled:
+                query_cache.store(question, query_emb)
+            cache_source = "miss"
 
         # Search
         k = top_k or self.top_k_retrieval
@@ -465,7 +520,10 @@ class LegalQARAG:
             })
 
         elapsed_ms = (time.time() - t0) * 1000
-        logger.info(f"Retrieval ({self.backend}): {len(decisions)} karar, {elapsed_ms:.0f}ms")
+        logger.info(
+            f"Retrieval ({self.backend}): {len(decisions)} karar, {elapsed_ms:.0f}ms "
+            f"(query_cache={cache_source})"
+        )
 
         return RAGContext(
             question=question,
@@ -473,6 +531,8 @@ class LegalQARAG:
             total_found=len(decisions),
             search_time_ms=elapsed_ms,
             query_embedding=query_emb,  # v1.3.0+: ask() cache lookup için tekrar kullanır
+            query_cache_hit=(cache_source != "miss"),  # v1.4.0+
+            query_cache_source=cache_source,            # v1.4.0+
         )
 
     async def ask(self, question: str, top_k: Optional[int] = None) -> RAGResponse:
@@ -522,7 +582,7 @@ class LegalQARAG:
             cache_ms = (time.time() - t_cache_start) * 1000
             if hit is not None:
                 logger.info(
-                    f"Cache HIT — LLM çağrısı atlandı, cache lookup {cache_ms:.0f}ms"
+                    f"Answer cache HIT — LLM çağrısı atlandı, cache lookup {cache_ms:.0f}ms"
                 )
                 response = RAGResponse(
                     question=question,
@@ -538,11 +598,13 @@ class LegalQARAG:
                     from_cache=True,
                     cache_score=hit.score,
                     llm_provider=hit.llm_provider,
+                    query_cache_hit=ctx.query_cache_hit,
+                    query_cache_source=ctx.query_cache_source,
                 )
                 logger.info(
-                    f"RAG tamam (CACHE) — toplam {response.total_time_ms:.0f}ms "
-                    f"(retrieval {ctx.search_time_ms:.0f}ms + cache {cache_ms:.0f}ms, "
-                    f"score={hit.score:.4f})"
+                    f"RAG tamam (ANSWER CACHE) — toplam {response.total_time_ms:.0f}ms "
+                    f"(retrieval {ctx.search_time_ms:.0f}ms [query_cache={ctx.query_cache_source}] "
+                    f"+ answer_cache {cache_ms:.0f}ms, score={hit.score:.4f})"
                 )
                 return response
 
@@ -597,11 +659,14 @@ class LegalQARAG:
             generation_time_ms=gen_ms,
             from_cache=False,
             llm_provider=llm.provider,
+            query_cache_hit=ctx.query_cache_hit,
+            query_cache_source=ctx.query_cache_source,
         )
         logger.info(
             f"RAG tamam — toplam {response.total_time_ms:.0f}ms "
-            f"(retrieval {ctx.search_time_ms:.0f}ms + gen {gen_ms:.0f}ms, "
-            f"provider={llm.provider}, tokens: {llm_resp.usage.get('total_tokens', 0)})"
+            f"(retrieval {ctx.search_time_ms:.0f}ms [query_cache={ctx.query_cache_source}] "
+            f"+ gen {gen_ms:.0f}ms, provider={llm.provider}, "
+            f"tokens: {llm_resp.usage.get('total_tokens', 0)})"
         )
         return response
 
