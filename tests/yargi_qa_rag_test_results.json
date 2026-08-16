@@ -1,0 +1,225 @@
+{
+  "test_config": {
+    "n_documents": 5,
+    "embedding_model": "nvidia/nv-embed-v1",
+    "embedding_dimension": 4096,
+    "llm_model": "meta/llama-3.1-70b-instruct",
+    "llm_temperature": 0.2,
+    "top_k": 3,
+    "test_date": "2026-08-16"
+  },
+  "results": [
+    {
+      "question": "Mirasçi, murisin muvazaali satisina karsi hangi davayi açar?",
+      "answer": "Mirasçı, murisin muvazaalı satışına karşı tapu iptal ve tescil davası açabilir. Bu dava, murisin muvazaalı satışının iptal edilmesi ve taşınmazın mirasçının adına tescil edilmesi amacıyla açılır.\n\nTapu iptal ve tescil davası, murisin muvazaalı satışının iptal edilmesi ve taşınmazın mirasçının adına tescil edilmesi amacıyla açılır. Bu dava, murisin muvazaalı satışının iptal edilmesi ve taşınmazın mirasçının adına tescil edilmesi amacıyla açılır.\n\n[1] Yargıtay 7. HD, E.2026/2403, K.2026/3418 (14.03.2002)\n\n[2] Yargıtay 7. HD, E.2026/4216, K.2026/3514 (29.06.2026)\n\n[3] Yargıtay 7. HD, E.2026/3025, K.2026/3499 (17.10.2019)\n\nNot: Bu cevap yapay zeka tarafından emsal karar metinlerine dayanarak üretilmiştir ve hukuki tavsiye niteliği taşımaz. Kesin bilgi için bir avukata danışın.",
+      "citations": [
+        {
+          "document_id": "1221108700",
+          "title": "7. Hukuk Dairesi - Esas: 2026/2403 - Karar: 2026/3418 - Tarih: 2002-03-14",
+          "similarity_score": 0.3497242331504822,
+          "preview": "Hukuk Dairesi 2026 2403 E , 2026 3418 K \"İçtihat Metni\" MAHKEMESİ : Adana Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2024 2152 E , 2026 135 K İLK DERECE MAHKEMESİ : Erdemli 3 Asliye Hukuk Mahkemesi SAYISI : 2014 55 E , 2021 216 K Bölge Adliye Mahkemesi kararı davalılardan vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapo...",
+          "text": "Hukuk Dairesi 2026 2403 E , 2026 3418 K \"İçtihat Metni\" MAHKEMESİ : Adana Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2024 2152 E , 2026 135 K İLK DERECE MAHKEMESİ : Erdemli 3 Asliye Hukuk Mahkemesi SAYISI : 2014 55 E , 2021 216 K Bölge Adliye Mahkemesi kararı davalılardan vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapo...",
+          "metadata": {
+            "document_id": "1221108700",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/2403",
+            "karar_no": "2026/3418",
+            "karar_tarihi": "2002-03-14",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221108700"
+        },
+        {
+          "document_id": "1221120300",
+          "title": "7. Hukuk Dairesi - Esas: 2026/4216 - Karar: 2026/3514 - Tarih: 29.06.2026",
+          "similarity_score": 0.34224584698677063,
+          "preview": "Hukuk Dairesi 2026 4216 E , 2026 3514 K \"İçtihat Metni\" MAHKEMESİ : Erzurum Bölge Adliye Mahkemesi 2 Hukuk Dairesi SAYISI : 2025 903 E , 2025 1315 K İLK DERECE MAHKEMESİ : Arpaçay Asliye Hukuk Mahkemesi SAYISI : 2024 298 E , 2025 111 K Bölge Adliye Mahkemesi kararı davacı tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapor dinlendikt...",
+          "text": "Hukuk Dairesi 2026 4216 E , 2026 3514 K \"İçtihat Metni\" MAHKEMESİ : Erzurum Bölge Adliye Mahkemesi 2 Hukuk Dairesi SAYISI : 2025 903 E , 2025 1315 K İLK DERECE MAHKEMESİ : Arpaçay Asliye Hukuk Mahkemesi SAYISI : 2024 298 E , 2025 111 K Bölge Adliye Mahkemesi kararı davacı tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapor dinlendikt...",
+          "metadata": {
+            "document_id": "1221120300",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/4216",
+            "karar_no": "2026/3514",
+            "karar_tarihi": "29.06.2026",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221120300"
+        },
+        {
+          "document_id": "1221217100",
+          "title": "7. Hukuk Dairesi - Esas: 2026/3025 - Karar: 2026/3499 - Tarih: 2019-10-17",
+          "similarity_score": 0.32684648036956787,
+          "preview": "Hukuk Dairesi 2026 3025 E , 2026 3499 K \"İçtihat Metni\" MAHKEMESİ : Ankara Bölge Adliye Mahkemesi 37 Hukuk Dairesi SAYISI : 2024 3437 E , 2026 577 K İLK DERECE MAHKEMESİ : Ankara Batı 5 Asliye Hukuk Mahkemesi SAYISI : 2021 398 E , 2022 276 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rap...",
+          "text": "Hukuk Dairesi 2026 3025 E , 2026 3499 K \"İçtihat Metni\" MAHKEMESİ : Ankara Bölge Adliye Mahkemesi 37 Hukuk Dairesi SAYISI : 2024 3437 E , 2026 577 K İLK DERECE MAHKEMESİ : Ankara Batı 5 Asliye Hukuk Mahkemesi SAYISI : 2021 398 E , 2022 276 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rap...",
+          "metadata": {
+            "document_id": "1221217100",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/3025",
+            "karar_no": "2026/3499",
+            "karar_tarihi": "2019-10-17",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221217100"
+        }
+      ],
+      "metrics": {
+        "total_time_ms": 76774.76596832275,
+        "retrieval_time_ms": 1003.2005310058594,
+        "generation_time_ms": 75770.04361152649,
+        "llm_usage": {
+          "prompt_tokens": 1669,
+          "completion_tokens": 279,
+          "total_tokens": 1948
+        }
+      },
+      "question_id": "Q1"
+    },
+    {
+      "question_id": "Q2",
+      "question": "Muvazaa iddiasinda ispat yükü kimin üzerinedir?",
+      "answer": "Muvazaa iddiasında ispat yükü, iddianın sahibi olan tarafın üzerindedir. Bu, Türk hukukunda genel bir prensiptir ve Yargıtay kararlarında da bu yönde kararlar verilmiştir.\n\nDetaylı analiz:\n\nMuvazaa, bir sözleşmenin veya bir hukuki işlemin, gerçek amacını gizlemek amacıyla, farklı bir şekil veya içerikle yapılmasıdır. Muvazaa iddiasında, iddianın sahibi olan taraf, muvazaa iddiasını ispatlamakla yükümlüdür. Bu, iddianın sahibi olan tarafın, muvazaa iddiasını destekleyen delilleri sunmakla yükümlü olduğu anlamına gelir.\n\nYargıtay kararlarında, muvazaa iddiasında ispat yükünün iddianın sahibi olan tarafın üzerindedir. Örneğin, Yargıtay 7. Hukuk Dairesi'nin 2025/4950 esas ve 2026/3424 karar sayılı kararında, \"Muvazaa iddiasında ispat yükü, iddianın sahibi olan tarafın üzerindedir\" denilmiştir. [1]\n\nAyrıca, Yargıtay 7. Hukuk Dairesi'nin 2026/2403 esas ve 2026/3418 karar sayılı kararında, \"Muvazaa iddiasında, iddianın sahibi olan taraf, muvazaa iddiasını ispatlamakla yükümlüdür\" denilmiştir. [2]\n\nSonuç olarak, muvazaa iddiasında ispat yükü, iddianın sahibi olan tarafın üzerindedir. Bu, Türk hukukunda genel bir prensiptir ve Yargıtay kararlarında da bu yönde kararlar verilmiştir.\n\nKaynaklar:\n\n",
+      "citations": [
+        {
+          "document_id": "1221227100",
+          "title": "7. Hukuk Dairesi - Esas: 2025/4950 - Karar: 2026/3424 - Tarih: 23.06.2026",
+          "similarity_score": 0.3058719038963318,
+          "preview": "Hukuk Dairesi 2025 4950 E , 2026 3424 K \"İçtihat Metni\" MAHKEMESİ : Gaziantep Bölge Adliye Mahkemesi 16 Hukuk Dairesi SAYISI : 2022 509 E , 2025 924 K İLK DERECE MAHKEMESİ : Kahramanmaraş 3 Asliye Hukuk Mahkemesi SAYISI : 2021 38 E , 2021 737 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan ...",
+          "text": "Hukuk Dairesi 2025 4950 E , 2026 3424 K \"İçtihat Metni\" MAHKEMESİ : Gaziantep Bölge Adliye Mahkemesi 16 Hukuk Dairesi SAYISI : 2022 509 E , 2025 924 K İLK DERECE MAHKEMESİ : Kahramanmaraş 3 Asliye Hukuk Mahkemesi SAYISI : 2021 38 E , 2021 737 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan ...",
+          "metadata": {
+            "document_id": "1221227100",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2025/4950",
+            "karar_no": "2026/3424",
+            "karar_tarihi": "23.06.2026",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221227100"
+        },
+        {
+          "document_id": "1221108700",
+          "title": "7. Hukuk Dairesi - Esas: 2026/2403 - Karar: 2026/3418 - Tarih: 2002-03-14",
+          "similarity_score": 0.3028234839439392,
+          "preview": "Hukuk Dairesi 2026 2403 E , 2026 3418 K \"İçtihat Metni\" MAHKEMESİ : Adana Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2024 2152 E , 2026 135 K İLK DERECE MAHKEMESİ : Erdemli 3 Asliye Hukuk Mahkemesi SAYISI : 2014 55 E , 2021 216 K Bölge Adliye Mahkemesi kararı davalılardan vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapo...",
+          "text": "Hukuk Dairesi 2026 2403 E , 2026 3418 K \"İçtihat Metni\" MAHKEMESİ : Adana Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2024 2152 E , 2026 135 K İLK DERECE MAHKEMESİ : Erdemli 3 Asliye Hukuk Mahkemesi SAYISI : 2014 55 E , 2021 216 K Bölge Adliye Mahkemesi kararı davalılardan vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapo...",
+          "metadata": {
+            "document_id": "1221108700",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/2403",
+            "karar_no": "2026/3418",
+            "karar_tarihi": "2002-03-14",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221108700"
+        },
+        {
+          "document_id": "1221120300",
+          "title": "7. Hukuk Dairesi - Esas: 2026/4216 - Karar: 2026/3514 - Tarih: 29.06.2026",
+          "similarity_score": 0.2982959747314453,
+          "preview": "Hukuk Dairesi 2026 4216 E , 2026 3514 K \"İçtihat Metni\" MAHKEMESİ : Erzurum Bölge Adliye Mahkemesi 2 Hukuk Dairesi SAYISI : 2025 903 E , 2025 1315 K İLK DERECE MAHKEMESİ : Arpaçay Asliye Hukuk Mahkemesi SAYISI : 2024 298 E , 2025 111 K Bölge Adliye Mahkemesi kararı davacı tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapor dinlendikt...",
+          "text": "Hukuk Dairesi 2026 4216 E , 2026 3514 K \"İçtihat Metni\" MAHKEMESİ : Erzurum Bölge Adliye Mahkemesi 2 Hukuk Dairesi SAYISI : 2025 903 E , 2025 1315 K İLK DERECE MAHKEMESİ : Arpaçay Asliye Hukuk Mahkemesi SAYISI : 2024 298 E , 2025 111 K Bölge Adliye Mahkemesi kararı davacı tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapor dinlendikt...",
+          "metadata": {
+            "document_id": "1221120300",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/4216",
+            "karar_no": "2026/3514",
+            "karar_tarihi": "29.06.2026",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221120300"
+        }
+      ],
+      "metrics": {
+        "total_time_ms": 87429.5060634613,
+        "retrieval_time_ms": 527.4674892425537,
+        "generation_time_ms": 86899.49631690979,
+        "llm_usage": {
+          "prompt_tokens": 1669,
+          "completion_tokens": 400,
+          "total_tokens": 2069
+        }
+      }
+    },
+    {
+      "question_id": "Q3",
+      "question": "Tapu iptal davasinda dava açma süresi nedir?",
+      "answer": "Tapu iptal davalarında dava açma süresi, Türk Medeni Kanunu'nun 713. maddesinde düzenlenmiştir. Ancak, sağlanan karar metinlerinde bu hususa açıkça yer verilmemiştir. \n\nDaha önce Yargıtay 14. Hukuk Dairesi'nin 2017/3951 E. ve 2018/2384 K. sayılı ilamında, tapu iptal davalarında dava açma süresinin, Türk Medeni Kanunu'nun 713. maddesinde öngörülen 5 yıllık süre olduğu belirtilmiştir. [1] \n\nAncak, sağlanan karar metinlerinde bu hususa açıkça yer verilmemiştir. Bu nedenle, tapu iptal davalarında dava açma süresinin ne olduğu hususunda net bir cevap verilememektedir.\n\nKaynaklar:\n[1] Yargıtay 14. Hukuk Dairesi, E. 2017/3951, K. 2018/2384 (14.03.2018)\n\nNot: Bu cevap yapay zeka tarafından emsal karar metinlerine dayanarak üretilmiştir ve hukuki tavsiye niteliği taşımaz. Kesin bilgi için bir avukata danışın.",
+      "citations": [
+        {
+          "document_id": "1221108700",
+          "title": "7. Hukuk Dairesi - Esas: 2026/2403 - Karar: 2026/3418 - Tarih: 2002-03-14",
+          "similarity_score": 0.4042854607105255,
+          "preview": "Hukuk Dairesi 2026 2403 E , 2026 3418 K \"İçtihat Metni\" MAHKEMESİ : Adana Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2024 2152 E , 2026 135 K İLK DERECE MAHKEMESİ : Erdemli 3 Asliye Hukuk Mahkemesi SAYISI : 2014 55 E , 2021 216 K Bölge Adliye Mahkemesi kararı davalılardan vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapo...",
+          "text": "Hukuk Dairesi 2026 2403 E , 2026 3418 K \"İçtihat Metni\" MAHKEMESİ : Adana Bölge Adliye Mahkemesi 1 Hukuk Dairesi SAYISI : 2024 2152 E , 2026 135 K İLK DERECE MAHKEMESİ : Erdemli 3 Asliye Hukuk Mahkemesi SAYISI : 2014 55 E , 2021 216 K Bölge Adliye Mahkemesi kararı davalılardan vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapo...",
+          "metadata": {
+            "document_id": "1221108700",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/2403",
+            "karar_no": "2026/3418",
+            "karar_tarihi": "2002-03-14",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221108700"
+        },
+        {
+          "document_id": "1221120300",
+          "title": "7. Hukuk Dairesi - Esas: 2026/4216 - Karar: 2026/3514 - Tarih: 29.06.2026",
+          "similarity_score": 0.3956865668296814,
+          "preview": "Hukuk Dairesi 2026 4216 E , 2026 3514 K \"İçtihat Metni\" MAHKEMESİ : Erzurum Bölge Adliye Mahkemesi 2 Hukuk Dairesi SAYISI : 2025 903 E , 2025 1315 K İLK DERECE MAHKEMESİ : Arpaçay Asliye Hukuk Mahkemesi SAYISI : 2024 298 E , 2025 111 K Bölge Adliye Mahkemesi kararı davacı tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapor dinlendikt...",
+          "text": "Hukuk Dairesi 2026 4216 E , 2026 3514 K \"İçtihat Metni\" MAHKEMESİ : Erzurum Bölge Adliye Mahkemesi 2 Hukuk Dairesi SAYISI : 2025 903 E , 2025 1315 K İLK DERECE MAHKEMESİ : Arpaçay Asliye Hukuk Mahkemesi SAYISI : 2024 298 E , 2025 111 K Bölge Adliye Mahkemesi kararı davacı tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rapor dinlendikt...",
+          "metadata": {
+            "document_id": "1221120300",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/4216",
+            "karar_no": "2026/3514",
+            "karar_tarihi": "29.06.2026",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221120300"
+        },
+        {
+          "document_id": "1221217100",
+          "title": "7. Hukuk Dairesi - Esas: 2026/3025 - Karar: 2026/3499 - Tarih: 2019-10-17",
+          "similarity_score": 0.38677650690078735,
+          "preview": "Hukuk Dairesi 2026 3025 E , 2026 3499 K \"İçtihat Metni\" MAHKEMESİ : Ankara Bölge Adliye Mahkemesi 37 Hukuk Dairesi SAYISI : 2024 3437 E , 2026 577 K İLK DERECE MAHKEMESİ : Ankara Batı 5 Asliye Hukuk Mahkemesi SAYISI : 2021 398 E , 2022 276 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rap...",
+          "text": "Hukuk Dairesi 2026 3025 E , 2026 3499 K \"İçtihat Metni\" MAHKEMESİ : Ankara Bölge Adliye Mahkemesi 37 Hukuk Dairesi SAYISI : 2024 3437 E , 2026 577 K İLK DERECE MAHKEMESİ : Ankara Batı 5 Asliye Hukuk Mahkemesi SAYISI : 2021 398 E , 2022 276 K Bölge Adliye Mahkemesi kararı davacı vekili tarafından temyiz edilmekle; kesinlik, süre, temyiz şartı ve diğer usul eksiklikleri yönünden yapılan ön inceleme sonucunda, temyiz dilekçesinin kabulüne karar verildikten ve Tetkik Hâkimi tarafından hazırlanan rap...",
+          "metadata": {
+            "document_id": "1221217100",
+            "birim_adi": "7. Hukuk Dairesi",
+            "esas_no": "2026/3025",
+            "karar_no": "2026/3499",
+            "karar_tarihi": "2019-10-17",
+            "court_type": "YARGITAYKARARI",
+            "chamber": "7. Hukuk Dairesi"
+          },
+          "source_url": "https://mevzuat.adalet.gov.tr/ictihat/1221217100"
+        }
+      ],
+      "metrics": {
+        "total_time_ms": 46223.153591156006,
+        "retrieval_time_ms": 2387.1026039123535,
+        "generation_time_ms": 43834.563970565796,
+        "llm_usage": {
+          "prompt_tokens": 1662,
+          "completion_tokens": 263,
+          "total_tokens": 1925
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_questions": 3,
+    "successful": 3,
+    "total_time_s": 210.42742562294006,
+    "total_tokens": 5942,
+    "avg_retrieval_ms": 1305.9235413869221,
+    "avg_llm_ms": 68834.70129966736
+  }
+}

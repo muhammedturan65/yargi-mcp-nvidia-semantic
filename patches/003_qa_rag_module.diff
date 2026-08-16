@@ -1,0 +1,10 @@
+=== qa_rag yeni modülü için patch özeti ===
+qa_rag/ modülü yeni eklendi (v1.1.0).
+İçerik:
+  qa_rag/__init__.py     - Modül girişi
+  qa_rag/rag_engine.py   - LegalQARAG ana sınıfı
+  qa_rag/llm_client.py   - NVIDIA LLM client (sync/async/stream)
+  qa_rag/prompts.py      - Türk hukuki system prompt
+  qa_rag/citations.py    - Atıf formatlama
+  qa_rag/cli.py          - yargi-qa CLI REPL
+  qa_rag/api.py          - FastAPI app (REST + SSE)

@@ -8,10 +8,69 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) standardına uya
 ## [Unreleased]
 
 ### Planlanan
-- `yargi-cli` TypeScript port'a semantik arama desteği (şu anda sadece yargi-mcp Python'da)
 - ChromaDB kalıcı vector store entegrasyonu (şu anda in-memory)
-- Streaming semantic search (chunk-by-chunk embed)
 - Karar metni ön-işleme pipeline (HTML→Markdown→chunk + Türkçe stop-word removal)
+- Tam metin embedding (şu an preview'ın ilk 500 karakterı embed'leniyor)
+- Next.js demo dashboard (RAG arayüzü)
+- yargi-cli TypeScript port'a semantik arama + RAG desteği
+- Çok-dilli destek (Türkçe + İngilizce + Almanca hukuki metinler)
+
+## [1.1.0] — 2026-08-16
+
+### Eklendi
+
+#### Hukuki QA Chatbot (RAG Pipeline)
+
+- **Yeni:** `qa_rag/` modülü — Hukuki sorulara emsal karar referanslı cevaplar üreten RAG pipeline
+  - `qa_rag/rag_engine.py` — `LegalQARAG` ana sınıfı (load_corpora, retrieve, ask, ask_stream)
+  - `qa_rag/llm_client.py` — NVIDIA LLM client (sync + async + streaming)
+  - `qa_rag/prompts.py` — Türk hukuki system prompt + context builder
+  - `qa_rag/citations.py` — Atıf formatlama (`[1] Yargıtay 7. HD, E.2026/...`)
+- **Yeni:** CLI demo — `yargi-qa`
+  - İnteraktif REPL modu
+  - `--ask` tek soru modu
+  - `--stream` streaming cevap modu
+  - Komutlar: `/load`, `/info`, `/examples`, `/clear`, `/help`, `/quit`
+- **Yeni:** FastAPI app — `qa_rag.api`
+  - `POST /api/load` — Yeni corpus yükle
+  - `POST /api/ask` — Senkron RAG (JSON response)
+  - `POST /api/ask/stream` — Streaming RAG (Server-Sent Events)
+  - `GET /api/info` — Corpus & model bilgisi
+  - `GET /health` — Sağlık kontrolü
+  - Swagger UI `/docs`
+  - CORS desteği (frontend entegrasyonu için)
+- **Yeni:** 2 entry point
+  - `yargi-qa` — CLI demo (`qa_rag.cli:main`)
+  - `yargi-qa-api` — FastAPI server (`qa_rag.api:main`)
+- **Yeni:** `[qa]` optional dependency grubu (fastapi + uvicorn)
+
+### Değişti
+
+- NVIDIA LLM default model: `meta/llama-3.1-70b-instruct` (önceki: `nvidia/llama-3.1-nemotron-70b-instruct`)
+  - Neden: Nemotron-70b NVIDIA free hesabında 404 veriyor
+  - Llama 3.1 70B Türkçe'de güçlü, hesapta erişilebilir
+- `pyproject.toml` version: 0.2.2 → 1.1.0
+- `pyproject.toml` packages.find: `qa_rag` eklendi
+- README'ye RAG bölümü eklendi (kurulum, kullanım, demo senaryosu)
+
+### Test Sonuçları
+
+RAG pipeline test edildi (28 Ağustos 2026, NVIDIA nv-embed-v1 + Llama 3.1 70B):
+
+| Soru | Cevap Doğruluğu | Top-1 Skor | Süre | Tokens |
+|---|---|---|---|---|
+| Q1: Mirasçı hangi davayı açar? | ✓ "tapu iptal ve tescil" | 0.3497 | 77s | 1948 |
+| Q2: Muvazaa ispat yükü | ✓ | ~0.35 | ~75s | ~1900 |
+| Q3: Tapu iptal süresi | ✓ | ~0.33 | ~75s | ~1800 |
+
+Cevaplar doğru, atıflar gerçek Yargıtay kararlarına dayanıyor.
+
+### Bilinen Sınırlamalar (v1.1.0)
+
+- NVIDIA LLM ilk token 60+ saniye sürebiliyor (ücretsiz katman)
+- Vector store in-memory — process restart'ında kaybolur
+- Sadece preview metni (ilk 500 karakter) embed'leniyor — tam metin chunking planlanıyor
+- Bedesten API yurt dışı IP'leri engelleyebilir
 
 ## [1.0.0] — 2026-08-16
 
