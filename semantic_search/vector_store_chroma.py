@@ -44,15 +44,14 @@ def _get_chroma_client():
         return _chroma_client
 
     import chromadb
-    from chromadb.config import Settings
 
     persist_dir = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
     os.makedirs(persist_dir, exist_ok=True)
 
-    _chroma_client = chromadb.PersistentClient(
-        path=persist_dir,
-        settings=Settings(anonymized_telemetry=False, allow_reset=True),
-    )
+    # Settings olmadan aç — chromadb 1.5.x default anonymized_telemetry=False,
+    # ve Settings parametresi çakışmalara neden olabiliyor (farklı settings
+    # ile ikinci kez açılışta ValueError: An instance of Chroma already exists)
+    _chroma_client = chromadb.PersistentClient(path=persist_dir)
     logger.info(f"ChromaDB persistent client açıldı: {persist_dir}")
     return _chroma_client
 

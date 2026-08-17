@@ -148,18 +148,17 @@ class BedestenIndexer:
         return self._chunker
 
     async def _get_bedensten_client(self):
+        """
+        Bedesten API client oluştur.
+
+        v1.5.0: mcp_server_main'e bağımlılık kaldırıldı — tüm MCP modülleri
+        yüklenip signal handler'ları tetiklemesin diye. Direkt BedestenApiClient
+        oluşturuyoruz (mcp_server_main.bedensten_client_instance ile aynı şey).
+        """
         if self._bedesten_client is None:
-            # mcp_server_main içindeki global bedesten_client_instance'ı kullan
-            import mcp_server_main as mcp
-            # bedesten_client_instance module-level singleton
-            self._bedesten_client = getattr(mcp, "bedesten_client_instance", None)
-            if self._bedesten_client is None:
-                # Yoksa kendimiz oluştur
-                from bedesten_mcp_module.client import BedestenApiClient
-                self._bedesten_client = BedestenApiClient()
-                logger.info("Yeni BedestenApiClient oluşturuldu (fallback)")
-            else:
-                logger.info("mcp_server_main.bedensten_client_instance kullanılıyor (shared)")
+            from bedesten_mcp_module.client import BedestenApiClient
+            self._bedesten_client = BedestenApiClient()
+            logger.info("BedestenApiClient oluşturuldu (direkt, mcp_server_main olmadan)")
         return self._bedesten_client
 
     # ------------------------------------------------------------------
@@ -338,45 +337,73 @@ class BedestenIndexer:
         court_types: List[str],
         target: int,
     ) -> List[Any]:
-        """Bedesten search ile yeterli sayıda karar ID topla."""
-        import mcp_server_main as mcp
+        """
+        Bedesten search ile yeterli sayıda karar ID topla.
+
+        v1.5.0+: Multi-page search desteği. Her keyword için birden fazla
+        sayfa çekerek 1000+ benzersiz karar toplayabilir.
+        """
         from bedesten_mcp_module.models import BedestenSearchRequest, BedestenSearchData
 
         client = await self._get_bedensten_client()
         seen_ids = set()
         all_decisions = []
 
-        # Her keyword × court_type kombinasyonu için search
+        # Her keyword için kaç sayfa çekeceğimizi hesapla
+        # 15 keyword × 5 sayfa × 50 sonuç = 3750 aday → ~1000-1500 benzersiz
+        max_pages = int(os.getenv("INDEXER_MAX_PAGES", "5"))
+
         for kw in keywords:
+            if len(all_decisions) >= target * 2:
+                break
+
             for court in court_types:
-                if len(all_decisions) >= target * 2:  # 2x toplama payı
+                if len(all_decisions) >= target * 2:
                     break
 
-                per_call = min(50, max(20, target // max(len(keywords), 1)))
-                try:
-                    req = BedestenSearchRequest(
-                        data=BedestenSearchData(
-                            phrase=kw,
-                            itemTypeList=[court],
-                            pageSize=per_call,
-                            pageNumber=1,
-                        )
-                    )
-                    resp = await client.search_documents(req)
-                    if resp.data and resp.data.emsalKararList:
-                        for d in resp.data.emsalKararList:
-                            if d.documentId not in seen_ids:
-                                seen_ids.add(d.documentId)
-                                all_decisions.append(d)
-                        logger.info(
-                            f"Search '{kw}' / {court} → +{len(resp.data.emsalKararList)} "
-                            f"(toplam {len(all_decisions)})"
-                        )
-                except Exception as e:
-                    logger.warning(f"Search hatası '{kw}'/{court}: {e}")
+                for page in range(1, max_pages + 1):
+                    if len(all_decisions) >= target * 2:
+                        break
 
-                # Bedesten rate-limit için bekle
-                await asyncio.sleep(1.0)
+                    per_call = min(50, max(20, target // max(len(keywords), 1)))
+                    try:
+                        req = BedestenSearchRequest(
+                            data=BedestenSearchData(
+                                phrase=kw,
+                                itemTypeList=[court],
+                                pageSize=per_call,
+                                pageNumber=page,
+                            )
+                        )
+                        resp = await client.search_documents(req)
+                        if resp.data and resp.data.emsalKararList:
+                            new_count = 0
+                            for d in resp.data.emsalKararList:
+                                if d.documentId not in seen_ids:
+                                    seen_ids.add(d.documentId)
+                                    all_decisions.append(d)
+                                    new_count += 1
+                            logger.info(
+                                f"Search '{kw}' / {court} / sayfa {page} → "
+                                f"+{len(resp.data.emsalKararList)} ({new_count} yeni) "
+                                f"(toplam {len(all_decisions)})"
+                            )
+                            # Eğer bu sayfada hiç yeni sonuç yoksa, sonraki sayfaya geçme
+                            if new_count == 0:
+                                logger.info(
+                                    f"  → Yeni sonuç yok, '{kw}' için sonraki sayfa atlanıyor"
+                                )
+                                break
+                        else:
+                            # Sonuç yok, bu keyword için bitir
+                            break
+
+                    except Exception as e:
+                        logger.warning(f"Search hatası '{kw}'/{court}/sayfa {page}: {e}")
+                        break  # Bu keyword için başkasına geç
+
+                    # Bedesten rate-limit için bekle
+                    await asyncio.sleep(1.0)
 
         return all_decisions
 

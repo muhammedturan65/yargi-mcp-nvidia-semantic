@@ -1,0 +1,21 @@
+{
+  "test": "v1.5.0 index test (100 belge)",
+  "date": "2026-08-17 14:05:33",
+  "keywords": [
+    "muvazaa tapu iptal",
+    "muris muvazaa",
+    "tapu iptali tescil",
+    "gizli muvazaa ispat",
+    "mirasçı tapu iptal"
+  ],
+  "target_docs": 100,
+  "result": {
+    "total_docs_indexed": 32,
+    "total_chunks": 142,
+    "total_tokens": 74671,
+    "elapsed_s": 406.7,
+    "chroma_count": 316,
+    "errors_count": 0,
+    "errors_sample": []
+  }
+}

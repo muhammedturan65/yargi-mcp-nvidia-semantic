@@ -48,7 +48,7 @@ PROVIDER_DEFAULTS = {
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
         "model": "meta/llama-3.1-70b-instruct",
-        "timeout": 90,  # NVIDIA 70B ilk token bazen çok yavaş
+        "timeout": 300,  # NVIDIA 70B free tier bazen 60-240s — 5dk timeout güvenli
         "api_key_env": "NVIDIA_API_KEY",  # fallback env var
     },
     "groq": {

@@ -115,6 +115,7 @@ class LegalQARAG:
         llm_provider: v1.3.0+ — "nvidia"|"groq"|"openai"|"ollama" (default: env LLM_PROVIDER)
         enable_answer_cache: v1.3.0+ — semantik answer cache (default: env RAG_ANSWER_CACHE)
         enable_query_cache: v1.4.0+ — query embedding cache (default: env RAG_QUERY_CACHE)
+        enable_section_aware: v1.5.0+ — section-aware reranking (default: env RAG_SECTION_AWARE)
 
     Usage:
         rag = LegalQARAG()                       # chroma backend (default)
@@ -139,6 +140,7 @@ class LegalQARAG:
         llm_provider: Optional[str] = None,
         enable_answer_cache: Optional[bool] = None,
         enable_query_cache: Optional[bool] = None,
+        enable_section_aware: Optional[bool] = None,
     ):
         if backend not in ("chroma", "memory"):
             raise ValueError(f"backend 'chroma' veya 'memory' olmalı, got: {backend}")
@@ -161,6 +163,13 @@ class LegalQARAG:
         if enable_query_cache is not None:
             os.environ["RAG_QUERY_CACHE"] = "true" if enable_query_cache else "false"
         self._query_cache = None  # lazy init
+
+        # v1.5.0+ — Section-aware retrieval scoring
+        if enable_section_aware is not None:
+            os.environ["RAG_SECTION_AWARE"] = "true" if enable_section_aware else "false"
+        self.section_aware = os.getenv("RAG_SECTION_AWARE", "true").lower() in (
+            "true", "1", "yes", "on",
+        )
 
         # Lazy-loaded components
         self._embedder = None
@@ -484,9 +493,20 @@ class LegalQARAG:
         # threshold 0.15 — Chroma cosine skorları NVIDIA passage/query arası
         # genelde 0.3-0.55 arası, ama kısa sorgularda 0.15'e düşebilir.
         if self.backend == "chroma" and hasattr(vs, "search_with_dedup"):
-            results = vs.search_with_dedup(query_emb, top_k=k, threshold=0.15)
+            # v1.5.0+: 3x daha fazla chunk çek, sonra section-aware rerank yapacağız
+            raw_k = k * 3 if self.section_aware else k
+            results = vs.search_with_dedup(query_emb, top_k=raw_k, threshold=0.15)
         else:
             results = vs.search(query_emb, top_k=k)
+
+        # v1.5.0+ — Section-aware reranking
+        # Hukuki kararlarda GEREKÇE ve HÜKÜM bölümleri en yüksek değere sahip.
+        # Bir sorguyla en alakalı chunk GEREKÇE'de ise, skoru boost'lanır.
+        if self.section_aware and self.backend == "chroma":
+            results = self._rerank_by_section(results)
+
+        # Top-k'ya kırp
+        results = results[:k]
 
         decisions = []
         for doc, score in results:
@@ -534,6 +554,76 @@ class LegalQARAG:
             query_cache_hit=(cache_source != "miss"),  # v1.4.0+
             query_cache_source=cache_source,            # v1.4.0+
         )
+
+    def _rerank_by_section(self, results: List, alpha: float = 0.15) -> List:
+        """
+        v1.5.0+ — Section-aware reranking.
+
+        Türk hukuki kararlarda farklı bölümler farklı değer taşır:
+          - GEREKÇE  → en yüksek (hukuki gerekçe, ilke)
+          - HÜKÜM    → yüksek (somut karar)
+          - KARAR    → orta (karar özeti)
+          - ÖZET     → orta
+          - DAVACI/DAVALI → düşük (taraflar, kimlik)
+          - body     → değişmez (genel metin)
+
+        Her sonuç için:
+          new_score = original_score * (1 + alpha * section_weight)
+
+        Bu, section boost'lu sonuçları üst sıraya çıkarır ama düşük
+        cosine skorlu yüksek-section chunk'larını orijinal yüksek skorluların
+        üstüne çıkarmaz (alpha=0.15 → max 15% boost).
+
+        Args:
+            results: List of (doc, score) tuples from ChromaDB search
+            alpha: Boost factor (0.15 = max %15 boost)
+
+        Returns:
+            Reranked list of (doc, score) tuples
+        """
+        # Section weight tablosu
+        SECTION_WEIGHTS = {
+            "GEREKÇE": 1.0,    # en yüksek — hukuki ilke, gerekçe
+            "HÜKÜM": 0.9,      # yüksek — somut karar
+            "HUKUM": 0.9,      # ASCII fallback
+            "KARAR": 0.7,      # orta — karar metni
+            "ÖZET": 0.6,       # orta — özet
+            "OZET": 0.6,       # ASCII fallback
+            "TURKISH": 0.5,    # orta — Türkçe çeviri
+            "BAŞLIK": 0.4,     # düşük — başlık
+            "BASLIK": 0.4,     # ASCII fallback
+            "DAVACI": 0.2,     # çok düşük — taraf kimliği
+            "DAVALI": 0.2,     # çok düşük — taraf kimliği
+            "İHBAR OLUNAN": 0.2,  # çok düşük
+            "body": 0.0,       # değişmez — genel metin
+            None: 0.0,         # section yok
+        }
+
+        def get_weight(section: Optional[str]) -> float:
+            if not section:
+                return 0.0
+            return SECTION_WEIGHTS.get(section.upper(), 0.0)
+
+        reranked = []
+        boosts_applied = 0
+        for doc, score in results:
+            section = doc.metadata.get("section") if hasattr(doc, "metadata") else None
+            weight = get_weight(section)
+            if weight > 0:
+                boosted = float(score) * (1.0 + alpha * weight)
+                reranked.append((doc, boosted))
+                boosts_applied += 1
+            else:
+                reranked.append((doc, float(score)))
+
+        # Skora göre yeniden sırala (yüksek → düşük)
+        reranked.sort(key=lambda x: x[1], reverse=True)
+
+        logger.info(
+            f"Section-aware rerank: {boosts_applied}/{len(results)} chunk boost'landı "
+            f"(alpha={alpha})"
+        )
+        return reranked
 
     async def ask(self, question: str, top_k: Optional[int] = None) -> RAGResponse:
         """

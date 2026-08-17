@@ -8,11 +8,72 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) standardına uya
 ## [Unreleased]
 
 ### Planlanan
-- Next.js demo dashboard (RAG arayüzü)
 - yargi-cli TypeScript port'a semantik arama + RAG desteği
 - Çok-dilli destek (Türkçe + İngilizce + Almanca hukuki metinler)
-- Hukuki stop-word filtering + section-aware retrieval (GEREKÇE section'ına ağırlık)
+- Hukuki stop-word filtering (section-aware retrieval v1.5.0'da eklendi)
 - Cache TTL (zaman aşımı) mekanizması
+- 1000+ karar indexleme (v1.5.0'da ~316'ya ulaşıldı, hedef 1000)
+
+## [1.5.0] — 2026-08-17
+
+### Eklendi
+- **Section-Aware Retrieval Scoring** (`qa_rag/rag_engine.py:_rerank_by_section`)
+  - Hukuki kararlarda tipik bölümlere göre ağırlıklı scoring:
+    - GEREKÇE → 1.0x (en yüksek — hukuki ilke, gerekçe)
+    - HÜKÜM → 0.9x (yüksek — somut karar)
+    - KARAR → 0.7x (orta — karar metni)
+    - ÖZET → 0.6x (orta — özet)
+    - DAVACI/DAVALI → 0.2x (çok düşük — taraf kimliği)
+    - body → 0.0x (değişmez)
+  - Boost formülü: `new_score = original_score * (1 + alpha * section_weight)`
+  - Default alpha=0.15 (max %15 boost — yüksek section'ı düşük cosine skordan üstün etmez)
+  - `LegalQARAG.__init__`'e `enable_section_aware` parametresi
+  - `RAG_SECTION_AWARE` env var (default: true)
+- **Multi-page Bedesten Search** (`qa_rag/indexer.py:_collect_decision_ids`)
+  - Her keyword için birden fazla sayfa çekerek 1000+ benzersiz karar toplama desteği
+  - `INDEXER_MAX_PAGES` env var (default: 5)
+  - Yeni sonuç yoksa otomatik sonraki sayfayı atlama (early termination)
+- **Indexer mcp_server_main bağımlılık kaldırıldı**
+  - `_get_bedensten_client()` direkt `BedestenApiClient` oluşturuyor (önceki mcp_server_main shared instance)
+  - Bu, signal handler çakışmalarını ve MCP modül init yükünü önlüyor
+- **ChromaDB Settings çakışma fix'i** (`semantic_search/vector_store_chroma.py`)
+  - `Settings(anonymized_telemetry=False, allow_reset=True)` parametresi kaldırıldı
+  - chromadb 1.5.x ile `ValueError: An instance of Chroma already exists with different settings` hatası çözüldü
+- **NVIDIA LLM timeout artırıldı** (`qa_rag/llm_client.py`)
+  - 90s → 300s (5 dakika) — NVIDIA free tier bazen 60-240s dönebiliyor
+- **Next.js Demo Dashboard** (bu repo dışında, ayrı project)
+  - Türk hukuki QA için web arayüzü
+  - SSE streaming destek (token token akıtma)
+  - Atıf kartları (genişletilebilir, section badge ile)
+  - Cache HIT/MISS badge'leri (query cache + answer cache)
+  - Real-time ChromaDB durum gösterimi
+  - `/api/rag-info` ve `/api/rag-ask` proxy route'ları
+
+### Değişti
+- `qa_rag/rag_engine.py` `retrieve()` metodu:
+  - Section-aware açıkken 3x daha fazla chunk çeker (top_k * 3), sonra rerank eder
+  - Rerank sonrası top_k'ya kırpar
+- `qa_rag/indexer.py` `_collect_decision_ids()`:
+  - Multi-page search desteği (her keyword için `INDEXER_MAX_PAGES` sayfa)
+  - Yeni sonuç yoksa sonraki sayfayı atlama (early termination)
+  - `import mcp_server_main as mcp` kaldırıldı — direkt BedestenApiClient
+- `semantic_search/vector_store_chroma.py` `_get_chroma_client()`:
+  - Settings parametresi kaldırıldı — chromadb 1.5.x default yeterli
+  - Çakışan settings hatası çözüldü
+- `qa_rag/llm_client.py` NVIDIA provider:
+  - timeout 90s → 300s (NVIDIA free tier 60-240s)
+
+### Test Sonuçları (v1.5.0)
+- ChromaDB: 82 → 316 kayıt (234 yeni chunk, ~60 yeni belge indexlendi)
+- Bedesten search: 5 keyword × 2 sayfa × 20 sonuç = 200 aday, 73 benzersiz karar bulundu
+- Section-aware rerank: 5/15 chunk boost'landı (alpha=0.15)
+- Retrieval süresi: ~12s (NVIDIA query embed, ilk sefer), cache HIT'lerle ~21ms
+- Cevap kalitesi: 5 atıf, hepsi Yargıtay 7. HD tapu/muvazaa kararları, en yüksek skor 0.5009
+
+### Bilinen Sınırlar (v1.5.0)
+- NVIDIA LLM free tier 60-240s — kullanıcı tarafında yük olmadığı sürece çözülemez
+- Bedesten rate-limit indexleme süresini sınırlar (~3.5s/belge)
+- 316 belge yeterli demo için ama 1000+ hedefleniyor (v1.6.0)
 
 ## [1.4.0] — 2026-08-17
 

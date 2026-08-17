@@ -36,7 +36,7 @@ from .citations import format_citations, Citation
 from .chunker import LegalChunker, Chunk, chunk_text
 from .indexer import BedestenIndexer, IndexResult, IndexProgress
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 __all__ = [
     "LegalQARAG",
     "RAGResponse",
